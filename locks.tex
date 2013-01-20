@@ -1,0 +1,70 @@
+\documentclass{article}
+\usepackage{fullpage}
+\usepackage{amsmath,amssymb,amsfonts}
+
+\title{Lens Examples for Locks and Constraints}
+
+\begin{document}
+\maketitle
+
+\newcommand\Sum{\texttt{sum}}
+\newcommand\Int{\texttt{int}}
+\newcommand\Float{\texttt{float}}
+\newcommand\F{\texttt F}
+\newcommand\T{\texttt T}
+\renewcommand\L{\texttt L}
+\newcommand\R{\texttt R}
+\newcommand\Fail{\texttt{fail}}
+
+\newcommand\form[4]{#1 \rightarrow #2, #3 \qquad \qquad #4}
+
+\subsection{Sums}
+
+\subsubsection{Flat Sums}
+A sum lens takes a list of numbers to its sum. 
+\begin{align*}
+    \Sum : \Float \leftrightarrow \Float^\ast
+\end{align*}
+Given a list, the put function produces the sum 
+of the numbers in the list; given an integer
+and a current list, the put function produces
+a new list which sums up to the input.
+
+In these examples, the put function has an additional
+argument, a list of booleans representing which elements
+of the list of numbers should be locked. 
+The canonical sum with no locks is as follows:
+\[ \text{Input} \qquad \qquad \qquad \qquad \qquad \text{Output} \]
+\[ \form {200} {[10,20,30,40]} {\F\F\F\F} {[20,40,60,80]} \]
+The difference between the sum of $[10,20,30,40]$ and the input $200$
+is $100$, so we scale every entry in the list by a factor of two. 
+When one or more of the list elements is locked, the scaling factor
+changes.
+\[ \form {200} {[10,20,30,40]} {\T\F\F\F} {[10,42.2,63.3,84.4]} \]
+To keep the first element of the list locked, the other elements
+must now scale by a factor of $\frac {19} 9$. 
+
+If all the elements in the list are locked, there are two options.
+First is to fail if the list cannot be mutated to conform to the
+sum.
+\[ \form {200} {[10,20,30,40]} {\T\T\T\T} {\Fail} \]
+The second option is to add elements to the list (changing
+the original list as little as possible) so that the sum holds.
+\[ \form {200} {[10,20,30,40]} {\T\T\T\T} {[10,20,30,40,100]} \]
+It is unclear in which contexts this notion of sum is appropriate.
+
+\subsubsection{Split Sum}
+
+Next we consider the lens which maps an ordered pair to
+a labeled list, with each element of the list labeled 
+as either \L (left) or \R (right). The left-labeled
+elements of the list should sum up to the left element
+of the ordered pair, and vice versa. 
+\[ \form {(50,50)} {[\L10,\L20,\R30,\R40]} {\F\F\F\F} {[\L16.67,\L33.33,\R21.43,\R28.57]} \]
+\[ \form {(50,50)} {[\L10,\L20,\R30,\R40]} {\T\F\F\T} {[\L10,\L40,\R10,\R40]} \]
+Again, if locks prevent us from mutating the list to fit the constraint, 
+there are two options.
+\[ \form {(50,70)} {[\L10,\L20,\R30,\R40]} {\T\T\F\F} {\Fail} \]
+\[ \form {(50,70)} {[\L10,\L20,\R30,\R40]} {\T\T\F\F} {[\L10,\L20,\L20,\R30,\R40]} \]
+
+\end{document}
