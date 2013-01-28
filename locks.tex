@@ -3,6 +3,7 @@
 \usepackage{amsmath,amssymb,amsfonts}
 
 \title{Lens Examples for Locks and Constraints}
+\date{}
 
 \begin{document}
 \maketitle
@@ -18,53 +19,172 @@
 
 \newcommand\form[4]{#1 \rightarrow #2, #3 \qquad \qquad #4}
 
-\subsection{Sums}
+\subsection*{Sums}
 
-\subsubsection{Flat Sums}
-A sum lens takes a list of numbers to its sum. 
-\begin{align*}
-    \Sum : \Float \leftrightarrow \Float^\ast
-\end{align*}
-Given a list, the put function produces the sum 
-of the numbers in the list; given an integer
-and a current list, the put function produces
-a new list which sums up to the input.
+This section is motivated by the following example. We are given
+sales data for a number of stores in a company, with 
+each store identified by its state. The regional managers 
+of the company can view the sum of their own region's sales 
+data and change that number, indicating a wish to increase future
+sales. If the manager wishes to change the sales figures from
+$n$ to $N$, each store's figures will be multiplied by $\frac N n$
+to make the change.
+Similarly, the CEO can see the total sum of national
+sales and adjust that number accordingly.  
 
-In these examples, the put function has an additional
-argument, a list of booleans representing which elements
-of the list of numbers should be locked. 
-The canonical sum with no locks is as follows:
+%% Put diagram here
+
+However, the sales data
+for an individual store or region may be fixed or \emph{locked},
+meaning that its sales data may not be changed.
+
+\subsubsection*{Flat Sums}
+
+We start with a lens which takes a single list of numbers
+to its sum.
+The default case, assuming no locks on the elements of the list,
+distributes $n-\sum_{i=1}^m x_i$ among the list in proportion to
+each $x_i$.
 \[ \text{Input} \qquad \qquad \qquad \qquad \qquad \text{Output} \]
-\[ \form {200} {[10,20,30,40]} {\F\F\F\F} {[20,40,60,80]} \]
-The difference between the sum of $[10,20,30,40]$ and the input $200$
-is $100$, so we scale every entry in the list by a factor of two. 
-When one or more of the list elements is locked, the scaling factor
-changes.
-\[ \form {200} {[10,20,30,40]} {\T\F\F\F} {[10,42.2,63.3,84.4]} \]
-To keep the first element of the list locked, the other elements
-must now scale by a factor of $\frac {19} 9$. 
+\begin{align}
+    \form {200} {[10,20,30,40]} {\F\F\F\F} {[20,40,60,80]}
+\end{align}
 
-If all the elements in the list are locked, there are two options.
-First is to fail if the list cannot be mutated to conform to the
-sum.
-\[ \form {200} {[10,20,30,40]} {\T\T\T\T} {\Fail} \]
-The second option is to add elements to the list (changing
-the original list as little as possible) so that the sum holds.
-\[ \form {200} {[10,20,30,40]} {\T\T\T\T} {[10,20,30,40,100]} \]
-It is unclear in which contexts this notion of sum is appropriate.
+In the presence of locks on $\{x_j \mid j \in J\}$, we produce
+a list which is the result of fixing the locked entries and 
+distributing $n-\sum_{i=1}^m x_i$ values among the $m-|J|$ locked
+elements of the list. 
+\begin{align}
+    \form {200} {[10,20,30,40]} {\T\F\F\F} {[10,42.2,63.3,84.4]}
+\end{align}
+To keep the first element of the list locked, we must scale
+the other elements by a factor of $\frac {19} 9$. 
 
-\subsubsection{Split Sum}
+If the constraints do not allow the elements of the list
+to be mutated to satisfy the sum, there are two possibilities
+of output. The first option is to fail if the list cannot be mutated in-place.
+\begin{align}
+    \form {200} {[10,20,30,40]} {\T\T\T\T} {\Fail}
+\end{align}
+The second option is to add elements to the list so that the sum holds.
+\begin{align}
+    \form {200} {[10,20,30,40]} {\T\T\T\T} {[10,20,30,40,100]} 
+\end{align}
+In what context would this notion of sum be appropriate?
+
+\subsubsection*{Split Sum}
 
 Next we consider the lens which maps an ordered pair to
 a labeled list, with each element of the list labeled 
 as either \L (left) or \R (right). The left-labeled
 elements of the list should sum up to the left element
-of the ordered pair, and vice versa. 
-\[ \form {(50,50)} {[\L10,\L20,\R30,\R40]} {\F\F\F\F} {[\L16.67,\L33.33,\R21.43,\R28.57]} \]
-\[ \form {(50,50)} {[\L10,\L20,\R30,\R40]} {\T\F\F\T} {[\L10,\L40,\R10,\R40]} \]
-Again, if locks prevent us from mutating the list to fit the constraint, 
-there are two options.
-\[ \form {(50,70)} {[\L10,\L20,\R30,\R40]} {\T\T\F\F} {\Fail} \]
-\[ \form {(50,70)} {[\L10,\L20,\R30,\R40]} {\T\T\F\F} {[\L10,\L20,\L20,\R30,\R40]} \]
+of the ordered pair, and vice versa.
+
+The default case with no locks behaves like an extension of the sum lens
+above.
+\begin{align}
+    \form {(50,50)} {[\L10,\L20,\R30,\R40]} {\F\F\F\F} 
+          {[\L16.67,\L33.33,\R21.43,\R28.57]}
+\end{align}
+
+Similarly, with the case for locks\ldots
+\begin{align}
+    \form {(50,50)} {[\L10,\L20,\R30,\R40]} {\T\F\F\T} 
+          {[\L10,\L40,\R10,\R40]}
+\end{align}
+
+If locks prevent us from mutating either section of
+the list to fit the constraint, we default to the options 
+presented for plain sums in this situation.
+\begin{align}
+    \form {(50,70)} {[\L10,\L20,\R30,\R40]} {\T\T\F\F} {\Fail}
+\end{align}
+\begin{align}
+    \form {(50,70)} {[\L10,\L20,\R30,\R40]} {\T\T\F\F} 
+          {[\L10,\L20,\L20,\R30,\R40]}
+\end{align}
+
+\subsubsection*{Multi-Level Lenses}
+We can represent the full sales example described in the beginning of
+this section as a lens with multiple levels. From the CEO's point of
+view, this lens stretches between the total sales data and a labelled
+list of store sales data. 
+
+When neither intermediary region is completely locked, a change from
+$n$ to $N$ first scales up the intermediary regions by a factor of
+$N/n$. The changes to each individual region must be accounted for,
+even if some of its sub-elements are locked.
+\begin{align}
+    \form {200} {(30,70),[\L10,\L20,\R30,\R40]} {\T\F\F\F} 
+          {(60,140),[\L10,\L50,\R60,\R80]}
+\end{align}
+
+When an entire region is locked however, we must propogate the locks
+up to the regional level.
+\begin{align}
+    \form {200} {(30,70),[\L10,\L20,\R30,\R40]} {\T\T\F\F}
+          {(30,170),[\L10,\L20,\R72.9,\R97.1]}
+\end{align}
+
+\subsection*{Cumulative Average}
+
+A student is given some number of grades in a class, and she wants
+to know what grades she needs to get in the future to obtain 
+a desired average. The constraints on this problem may go beyond
+locking to illuminate different environments. 
+
+Given that all grades fall within a certain range, how many assignments
+must the student complete to raise her average?
+\begin{align}
+    \form {95} {[80,100]} 
+    {\{\text{lists like $[80,100,x_0,x_1,x_2,\ldots]$ where
+      $0 \le x_i \le 100$}\}}
+    {[80,100,100,100]}
+\end{align}
+
+The constraint might limit the number of future assignments.
+\begin{align}
+    \form {95} {[80,100]} 
+    {\{\text{lists like $[80,100,x_0,\ldots,x_{n-1}]$ where
+      $0 \le x_i \le 100$ and $n\le1$}\}}
+    {\Fail}
+\end{align}
+
+\subsection*{Partition}
+
+Constraints on the partition lens can be stated in a very general form,
+and might be able to guide the lens's alignment/update policy. 
+Let $A$, $B$ and $C$ be the following lists:
+\begin{center} \begin{tabular}{l l | l | l}
+    $A$ & &$B$ &$C$ \\
+    \hline
+    \L &Bach &Bach &Asimov\\
+    \R &Asimov &Beethovan &Austin\\
+    \L &Beethovan & &
+\end{tabular} \end{center}
+For example, we can use the constraint to model the structure
+of the merge.
+\begin{align}
+    \form {B,C} {A} {\{\text{lists with authors first}\}} {~} 
+    \begin{tabular}{l l}
+        \R &\text{Asimov} \\
+        \R &\text{Austin} \\
+        \L &\text{Bach} \\
+        \L &\text{Beethovan}
+    \end{tabular}
+\end{align}
+\begin{align} 
+    \form {B,C} {A} {\{\text{lists like $A\texttt{++}Z$
+           where elements in $Z$ do not appear in $A$}\}} {~} 
+    \begin{tabular}{l l}
+        \L &\text{Bach} \\
+        \R &\text{Asimov} \\
+        \L &\text{Beethovan} \\
+        \R &\text{Austin} 
+    \end{tabular}
+\end{align}
+   
+
+
 
 \end{document}
