@@ -1,0 +1,4 @@
+digraph facebook_friends {
+    { graph [rank=same]; 3; friends_of_3 [label=""] }
+    3 -> friends_of_3 [label="friends"];
+}

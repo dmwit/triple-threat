@@ -1,0 +1,3 @@
+digraph facebook_more_roots {
+    { graph [rank=same]; 1 2 3 4; }
+}

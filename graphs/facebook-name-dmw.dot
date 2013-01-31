@@ -1,0 +1,4 @@
+digraph facebook_name_dmw {
+    { graph [rank=same]; 1 DMW [rank=min]; }
+    1 -> DMW [label="name"];
+}

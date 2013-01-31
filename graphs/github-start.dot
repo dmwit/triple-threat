@@ -1,0 +1,14 @@
+digraph github_start {
+    u1 -> u2 [dir=none,label=friend];
+    u2 -> u3 [dir=none,label=friend];
+    u1 -> p1 [dir=none,label=project];
+    u2 -> p1 [dir=none,label=project];
+    u2 -> p2 [dir=none,label=project];
+    u3 -> p1 [dir=none,label=project];
+    u3 -> p2 [dir=none,label=project];
+    u1 -> DW [style=dotted,label=name];
+    u2 -> JP [style=dotted,label=name];
+    u3 -> MG [style=dotted,label=name];
+    p1 -> lens [style=dotted,label=name];
+    p2 -> crash [style=dotted,label=name];
+}

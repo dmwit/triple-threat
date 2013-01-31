@@ -1,0 +1,16 @@
+digraph facebook_start_jp {
+    friends_of_1 [label=""];
+    friends_of_2 [label=""];
+    friends_of_3 [label=""];
+    name_of_1 [label=JP];
+    name_of_2 [label=JP];
+    { graph [rank=min]; 1; }
+    1 -> name_of_1 [label=name];
+    1 -> friends_of_1 [label=friends];
+    friends_of_1 -> 2;
+    friends_of_1 -> 3;
+    2 -> name_of_2 [label=name];
+    3 -> PMO [label=name];
+    2 -> friends_of_2 -> 1;
+    3 -> friends_of_3;
+}

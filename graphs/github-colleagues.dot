@@ -1,0 +1,7 @@
+digraph github_colleagues {
+    u2 -> p2 [dir=none,label=project];
+    p2 -> u3 [dir=none,label=project];
+    u2 -> p1 [dir=none,label=project];
+    p1 -> u1 [dir=none,label=project];
+    p1 -> u3 [dir=none,label=project];
+}

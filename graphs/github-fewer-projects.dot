@@ -1,0 +1,7 @@
+digraph github_fewer_projects {
+    {
+        graph [rank=same];
+        u2 -> p2 [dir=none,label=project];
+        p2 -> u3 [dir=none,label=project];
+    }
+}

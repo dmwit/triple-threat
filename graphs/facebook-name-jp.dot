@@ -1,0 +1,4 @@
+digraph facebook_name_jp {
+    { graph [rank=same]; 1 JP [rank=min]; }
+    1 -> JP [label="name"];
+}

@@ -1,0 +1,14 @@
+digraph facebook_start_dmw {
+    friends_of_1 [label=""];
+    friends_of_2 [label=""];
+    friends_of_3 [label=""];
+    { graph [rank=min]; 1; }
+    1 -> DMW [label=name];
+    1 -> friends_of_1 [label=friends];
+    friends_of_1 -> 2;
+    friends_of_1 -> 3;
+    2 -> JP [label=name];
+    3 -> PMO [label=name];
+    2 -> friends_of_2 -> 1;
+    3 -> friends_of_3;
+}
