@@ -1,0 +1,618 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb,amsfonts}
+\newcommand{\scaledgraph}[2]{\includegraphics[scale=#1]{graphs/#2.eps}}
+\newcommand{\graph}[1]{\scaledgraph{0.5}{#1}}
+\newcommand{\centeredgraph}[1]{\begin{center}\graph{#1}\end{center}}
+\newcommand{\inlinegraph}[1]{\scaledgraph{0.2}{#1}}
+\newcommand\Sum{\texttt{sum}}
+\newcommand\Int{\texttt{int}}
+\newcommand\Float{\texttt{float}}
+\newcommand\F{\texttt F}
+\newcommand\T{\texttt T}
+\renewcommand\L{\texttt L}
+\newcommand\R{\texttt R}
+\newcommand\Fail{\texttt{fail}}
+
+\newcommand\form[4]{#1 \rightarrow #2, #3 \qquad \qquad #4}
+\begin{document}
+\section{Locks and constraints}
+\subsection*{Sums}
+
+This section is motivated by the following example. We are given
+sales data for a number of stores in a company, with 
+each store identified by its state. The regional managers 
+of the company can view the sum of their own region's sales 
+data and change that number, indicating a wish to increase future
+sales. If the manager wishes to change the sales figures from
+$n$ to $N$, each store's figures will be multiplied by $\frac N n$
+to make the change.
+Similarly, the CEO can see the total sum of national
+sales and adjust that number accordingly.  
+
+%% Put diagram here
+
+However, the sales data
+for an individual store or region may be fixed or \emph{locked},
+meaning that its sales data may not be changed.
+
+On Notation: the lenses given here all have intuitive semantics in the 
+``get'' direction, but in the ``put'' direction there is some
+ambiguity. Therefore the examples detail only ``put'' behavior.
+The put function of a lens takes (1) some input, (2) the current state of
+the data, (3) some constraints on the data, and outputs either
+failure or a new state. This is modeled using arrows:
+\[ \form {\text{input}} {\text{current state}} {\text{constraints}} {\text{output}}.\]
+When the state is a list of length $n$ and the constraint
+on the data is that certain elements of the list may not change
+in the output, we represent this \emph{locking constraint} as a boolean list
+$O_1,\ldots,O_n$ of length $n$, where $O_i=T$ means the $i$th element
+is locked, and $O_i=F$ otherwise. 
+
+More general constraints are modeled as sets of feasible output.
+
+\subsubsection*{Flat Sums}
+
+We start with a lens which takes a single list of numbers
+to its sum.
+The default case, assuming no locks on the elements of the list,
+distributes $n-\sum_{i=1}^m x_i$ among the list in proportion to
+each $x_i$.
+\begin{align}
+    \form {200} {[10,20,30,40]} {\F\F\F\F} {[20,40,60,80]}
+\end{align}
+
+In the presence of locks on $\{x_j \mid j \in J\}$, we produce
+a list which is the result of fixing the locked entries and 
+distributing $n-\sum_{i=1}^m x_i$ values among the $m-|J|$ locked
+elements of the list. 
+\begin{align}
+    \form {200} {[10,20,30,40]} {\T\F\F\F} {[10,42.2,63.3,84.4]}
+\end{align}
+To keep the first element of the list locked, we must scale
+the other elements by a factor of $\frac {19} 9$. 
+
+If the constraints do not allow the elements of the list
+to be mutated to satisfy the sum, there are two possibilities
+of output. The first option is to fail if the list cannot be mutated in-place.
+\begin{align}
+    \form {200} {[10,20,30,40]} {\T\T\T\T} {\Fail}
+\end{align}
+The second option is to add elements to the list so that the sum holds.
+\begin{align}
+    \form {200} {[10,20,30,40]} {\T\T\T\T} {[10,20,30,40,100]} 
+\end{align}
+In what context would this notion of sum be appropriate?
+
+\subsubsection*{Split Sum}
+
+Next we consider the lens which maps an ordered pair to
+a labeled list, with each element of the list labeled 
+as either \L (left) or \R (right). The left-labeled
+elements of the list should sum up to the left element
+of the ordered pair, and vice verse.
+
+The default case with no locks behaves like an extension of the sum lens
+above.
+\begin{align}
+    \form {(50,50)} {[\L10,\L20,\R30,\R40]} {\F\F\F\F} 
+          {[\L16.67,\L33.33,\R21.43,\R28.57]}
+\end{align}
+
+Similarly, with the case for locks\ldots
+\begin{align}
+    \form {(50,50)} {[\L10,\L20,\R30,\R40]} {\T\F\F\T} 
+          {[\L10,\L40,\R10,\R40]}
+\end{align}
+
+If locks prevent us from mutating either section of
+the list to fit the constraint, we default to the options 
+presented for plain sums in this situation.
+\begin{align}
+    \form {(50,70)} {[\L10,\L20,\R30,\R40]} {\T\T\F\F} {\Fail}
+\end{align}
+\begin{align}
+    \form {(50,70)} {[\L10,\L20,\R30,\R40]} {\T\T\F\F} 
+          {[\L10,\L20,\L20,\R30,\R40]}
+\end{align}
+
+\subsubsection*{Multi-Level Lenses}
+We can represent the full sales example described in the beginning of
+this section as a lens with multiple levels. From the CEO's point of
+view, this lens stretches between the total sales data and a labeled
+list of store sales data. 
+
+When neither intermediary region is completely locked, a change from
+$n$ to $N$ first scales up the intermediary regions by a factor of
+$N/n$. The changes to each individual region must be accounted for,
+even if some of its sub-elements are locked.
+\begin{align}
+    \form {200} {(30,70),[\L10,\L20,\R30,\R40]} {\T\F\F\F} 
+          {(60,140),[\L10,\L50,\R60,\R80]}
+\end{align}
+
+When an entire region is locked however, we must propagate the locks
+up to the regional level.
+\begin{align}
+    \form {200} {(30,70),[\L10,\L20,\R30,\R40]} {\T\T\F\F}
+          {(30,170),[\L10,\L20,\R72.9,\R97.1]}
+\end{align}
+
+\subsection*{Cumulative Average}
+
+A student is given some number of grades in a class, and she wants
+to know what grades she needs to get in the future to obtain 
+a desired average. The constraints on this problem may go beyond
+locking to illuminate different environments. 
+
+Given that all grades fall within a certain range, how many assignments
+must the student complete to raise her average?
+\begin{align}
+    \form {95} {[80,100]} 
+    {\{\text{lists like $[80,100,x_0,x_1,x_2,\ldots]$ where
+      $0 \le x_i \le 100$}\}}
+    {[80,100,100,100]}
+\end{align}
+
+The constraint might limit the number of future assignments.
+\begin{align}
+    \form {95} {[80,100]} 
+    {\{\text{lists like $[80,100,x_0,\ldots,x_{n-1}]$ where
+      $0 \le x_i \le 100$ and $n\le1$}\}}
+    {\Fail}
+\end{align}
+
+\subsection*{Partition}
+
+Constraints on the partition lens can be stated in a very general form,
+and might be able to guide the lens's alignment/update policy. 
+Let $A$, $B$ and $C$ be the following lists:
+\begin{center} \begin{tabular}{l l | l | l}
+    $A$ & &$B$ &$C$ \\
+    \hline
+    \L &Bach &Bach &Asimov\\
+    \R &Asimov &Beethoven &Austen\\
+    \L &Beethoven & &
+\end{tabular} \end{center}
+For example, we can use the constraint to model the structure
+of the merge.
+\begin{align}
+    \form {B,C} {A} {\{\text{lists with authors first}\}} {~} 
+    \begin{tabular}{l l}
+        \R &\text{Asimov} \\
+        \R &\text{Austen} \\
+        \L &\text{Bach} \\
+        \L &\text{Beethoven}
+    \end{tabular}
+\end{align}
+\begin{align} 
+    \form {B,C} {A} {\{\text{lists like $A\texttt{++}Z$
+           where elements in $Z$ do not appear in $A$}\}} {~} 
+    \begin{tabular}{l l}
+        \L &\text{Bach} \\
+        \R &\text{Asimov} \\
+        \L &\text{Beethoven} \\
+        \R &\text{Austen} 
+    \end{tabular}
+\end{align}
+
+\subsection*{Database Operations}
+
+In certain contexts, it might be valuable to view operations on relational
+databases as lenses. We can represent get functions by SELECT INTO statements
+and put functions by UPDATE statements, which take the old state of the
+table into account. WHERE clauses represent constraints we have on the lenses. 
+
+\subsubsection*{Select}
+
+Let's start with a simple SELECT statement example.
+Let \textsc{jobs} be the following table, describing the jobs of employees
+at a company.
+\begin{center} \begin{tabular} {c | c c c}
+    \textsc{jobs} & id & name & title \\
+    \hline
+    & 1 & Adam Aardvark & CEO \\
+    & 2 & Brian Badger & VP of Sales \\
+    & 3 & Charlie Camel & VP of Engineering \\
+    & 4 & Diane Duck & Software Engineer
+\end{tabular} \end{center}
+A simple select statement picks out the name of the CEO.
+\begin{quote}
+    SELECT name \\
+    INTO \textsc{ceo} \\
+    FROM \textsc{jobs} \\
+    WHERE title=`CEO'
+\end{quote}
+This produces a table \textsc{ceo} as follows:
+\begin{center} \begin{tabular} {c | c}
+    \textsc{ceo} & name\\
+    \hline
+    & Adam Aardvark
+\end{tabular} \end{center}
+Suppose Adam gets married and wants to change his name to a
+hyphenated version. The following query updates the \textsc{ceo} table:
+\begin{quote}
+    UPDATE \textsc{ceo} \\
+    SET name=Adam Aardvark-Albatross
+\end{quote}
+The result is the following updated table:
+\begin{center} \begin{tabular} {c | c}
+    \textsc{ceo} & name\\
+    \hline
+    & Adam Aardvark-Albatross
+\end{tabular} \end{center}
+The putback function uses the same constraint to update the \textsc{jobs}
+table as it used to select into the \textsc{ceo} table. 
+\begin{quote}
+    UPDATE \textsc{jobs} \\
+    SET name = \textsc{ceo}.name \\
+    WHERE title = `CEO' 
+\end{quote}
+The result is the following:
+\begin{center} \begin{tabular} {c | c c c}
+    \textsc{jobs} & id & name & title \\
+    \hline
+    & 1 & Adam Aardvark-Albatross & CEO \\
+    & 2 & Brian Badger & VP of Sales \\
+    & 3 & Charlie Camel & VP of Engineering \\
+    & 4 & Diane Duck & Software Engineer
+\end{tabular} \end{center}
+
+\subsubsection*{Join}
+
+Consider the JOIN operation as a function from a pair of tables to a single
+table. We might also want to move from a single table back to the 
+separate pairs. Let's start with two tables, \textsc{jobs} as before,
+and \textsc{bosses} which gives the id numbers of employees and their bosses.
+\begin{center} \begin{tabular} {c | c c c}
+    \textsc{jobs} & id & name & title \\
+    \hline
+    & 1 & Adam Aardvark & CEO \\
+    & 2 & Brian Badger & VP of Sales \\
+    & 3 & Charlie Camel & VP of Engineering \\
+    & 4 & Diane Duck & Software Engineer
+\end{tabular} \end{center}
+\begin{center} \begin{tabular} {c | c c }
+    \textsc{bosses} & id & boss\_id \\
+    \hline
+    & 1 & 1 \\
+    & 2 & 1 \\
+    & 3 & 1 \\
+    & 4 & 3 
+\end{tabular} \end{center}
+Using the JOIN operation, we can write the following query which lists 
+the names of employees along with the names of their boss.
+\begin{quote}
+    SELECT J1.name, J2.name \\
+    INTO \textsc{named\_bosses} \\
+    FROM \textsc{jobs} J1 JOIN \textsc{bosses} B JOIN \textsc{jobs} J2 \\
+    ON J1.id = B.id AND B.boss\_id=J2.id
+\end{quote}
+The result is the following:
+\begin{center} \begin{tabular} {c | c c }
+    \textsc{named\_bosses} & name & boss\_name \\
+    \hline
+    & Adam Aardvark & Adam Aardvark \\
+    & Brian Badger & Adam Aardvark \\
+    & Charlie Camel & Adam Aardvark \\
+    & Diane Duck & Charlie Camel
+\end{tabular} \end{center}
+If we change Diane Duck's boss to Brian Badger, we get
+\begin{center} \begin{tabular} {c | c c }
+    \textsc{named\_bosses} & name & boss\_name \\
+    \hline
+    & Adam Aardvark & Adam Aardvark \\
+    & Brian Badger & Adam Aardvark \\
+    & Charlie Camel & Adam Aardvark \\
+    & Diane Duck & Brian Badger
+\end{tabular} \end{center}
+The change needs to be reflected back into the \textsc{bosses}
+table (as, in this case, no change is made in \textsc{jobs}).
+\begin{quote}
+    UPDATE \textsc{bosses} \\
+    FROM \textsc{jobs} J1 JOIN \textsc{named\_bosses} N JOIN \textsc{jobs} J2 \\
+    ON J1.name = N.name AND N.boss\_name = J2.name \\
+    SET B.boss\_id = J2.id \\
+    WHERE B.id = J1.id
+\end{quote}
+This update results in the expected \textsc{bosses} table:
+\begin{center} \begin{tabular} {c | c c }
+    \textsc{bosses} & id & boss\_id \\
+    \hline
+    & 1 & 1 \\
+    & 2 & 1 \\
+    & 3 & 1 \\
+    & 4 & 2 
+\end{tabular} \end{center}
+
+
+\section{Graph selection}
+\subsection*{Setting: Simplified Facebook}
+Graphs have three kinds of nodes: user identity nodes, friends list nodes,
+and name nodes. User identities point to a name node and a friends list
+node; friends list nodes point to user identity nodes. For example:
+
+\centeredgraph{facebook-start}
+
+\subsubsection*{Choosing the name field}
+The simplest thing you might want to do is pick out a particular person's
+name. For example, let's play with a lens that we will call ``1:name'' for
+now that picks out the node with user identity 1 and its corresponding name
+node. In the get direction, the above graph would be in sync with the graph
+\inlinegraph{facebook-name-dw}.
+
+We could put back the graph \inlinegraph{facebook-name-dmw} to get the
+graph:
+
+\centeredgraph{facebook-start-dmw}
+
+If we put back a graph like \inlinegraph{facebook-name-jp} with a name that
+happens to already be in the graph, we would not want to introduce spurious
+sharing:
+
+\begin{center}
+    \graph{facebook-start-jp} not \graph{facebook-spurious-sharing}
+\end{center}
+
+\subsubsection*{Choosing the friends field}
+
+Let's call this lens ``3:friends:*''; it should behave pretty similarly to the
+last one, picking out PMO's friends. For example, the starting graph would
+be in sync with the graph \inlinegraph{facebook-friends}. However, unlike
+the previous lens, if we put back a graph like
+\inlinegraph{facebook-friends-1}, we should get some sharing:
+
+\centeredgraph{facebook-start-more-friends}
+
+Perhaps either the graph itself or some part of the lens should indicate
+where sharing is desired and where not. For example, you might imagine
+having two separate ``chunks'' of each graph: the chunk where sharing is
+expected and nodes have permanent node identities, and chunks that are
+tree-like attached to identified nodes.
+
+\subsubsection*{Creating and deleting users}
+
+It's not clear exactly what interface you want for this. You could keep a
+strict analogy with lenses as we know them. In that case, you would want to
+be able to write a lens, let's call it ``users'', which would pick out all
+the roots of the graph. For example, the starting graph above would be in
+sync with \inlinegraph{facebook-roots}. You would then create a new user by
+putting back a graph like \inlinegraph{facebook-more-roots}, which would
+result in something like:
+\centeredgraph{facebook-start-more-roots}
+Alternatively, you could put back a graph like
+\inlinegraph{facebook-fewer-roots} to delete a user and (presumably) garbage
+collect its fields:
+\centeredgraph{facebook-start-fewer-roots}
+Perhaps one would like some additional operation for creation and deletion,
+though.
+
+\subsection*{Setting: Simplified Github}
+
+Graphs have three kinds of nodes: user nodes, project nodes, and names. We
+will expect the user and project nodes to have identities, and therefore
+this part of the graph should exhibit sharing during updates, whereas the
+names should not. Here's a sample graph, using dotted lines for the
+``unshared'' chunks of the graph:
+
+\centeredgraph{github-start}
+
+\subsubsection*{People who are working together}
+
+We might want to pick out all of JP's colleagues. Let's call the lens that
+does this ``u2:project:project''. The sample graph above would be in sync
+with the graph:
+\centeredgraph{github-colleagues}
+We could then indicate that JP is no longer working on the crash project by
+putting back the graph \inlinegraph{github-fewer-projects}, which would
+result in:
+\centeredgraph{github-start-fewer-projects}
+This graph only differs from the original by the deletion of a project edge
+between u2 and p1.
+
+\subsubsection*{Adjusting names/friendship}
+
+As with the simplified Facebook example, we expect that changing names
+doesn't produce sharing but changing local friendship subgraphs might; so we
+distinguish between these subgraphs using the solid and dotted edges.
+
+\subsubsection*{Creating or deleting users and projects}
+
+The discussion of the previous section applies almost verbatim: we could try
+to cast this as a classical lens by creating one which picks out just the
+user nodes or just the project nodes, but even after doing that it may make
+sense to have a separate operation for creation (since, after all, it should
+probably be the system's job to pick a globally unique ID for the new user
+or project).
+
+\section{Many-directional programming}
+\subsection*{Net sales}
+This example is as discussed at LogicBlox: we have sales, costs, and net
+sales. Each are lists, and the sales are the pointwise sum of the net sales
+and the costs. To begin with, we have three repositories; throughout this
+document, we'll label repository states with capital letters. Thus:
+\begin{align*}
+    S &= [110,220,330,440] \\
+    C &= [100,200,300,400] \\
+    N &= [10,20,30,40]
+\end{align*}
+These are our original, synchronized repositories.
+
+For updates to the net sales $N$ or the costs $C$, it seems fairly clear
+what should happen.
+
+\[N' = [10,20,30,50] \rightarrow (S,C) \Rightarrow S' = [110,220,330,450]\]
+\[C' = [100,200,500,400] \rightarrow (S,N) \Rightarrow S' = [110,220,530,440]\]
+
+However, if we update $S'=[110,220,450,440]$, there seem to be more choices.
+Perhaps one natural choice is to scale $N$ and $C$ together:
+\begin{align*}
+    N' &= [10,20,\frac{450}{300}30,40] \\
+    C' &= [100,200,\frac{450}{300}300,400]
+\end{align*}
+However, we could also imagine shifting everything into $N$ or into $C$:
+\[N' = [10,20,180,40]\]
+or:
+\[C' = [100,200,450,400]\]
+or distribute the extra evenly:
+\begin{align*}
+    N' &= [10,20,105,40] \\
+    C' &= [100,200,375,400]
+\end{align*}
+
+Perhaps each of these is reasonable at different times.
+
+\subsection*{GUI}
+We might imagine designing a text editor, which has three widgets: a text
+buffer, the displayed text, and a scroll bar state containing the current
+chunk being displayed and the total number of chunks.
+\begin{align*}
+    A &= [some,long,text] \\
+    B &= long \\
+    C &= (2,3)
+\end{align*}
+
+For some updates, it is clear what to do
+\begin{itemize}
+    \item If we set $C'=(3,3)$ (scrolling down), we should update $B' =
+        text$.
+    \item If we set $B'=short$, we should update $A=[some,short,text]$.
+    \item If we update $A'=[no,long,text]$, $B$ and $C$ may remain as-is.
+    \item If we update $A'=[some,very,long,text]$, we should update
+        $C'=(3,4)$.
+\end{itemize}
+
+However, if $A'$ is radically different from $A$, we have some choices to
+make that require heuristics. Choices include keeping the current line
+number, jumping to the beginning, jumping to the end, and keeping the current ``percentage of document''.
+
+Moreover, it's not at all clear that these are the right data structures at
+all: for example, it's not clear how to delete a line from $A$ just from the
+$B$ widget.
+
+Let $A$ be the following buffer:
+\begin{align*}
+  &\text{apple} \\
+  &\text{banana} \\
+  &\text{cherry} \\
+  &\text{dog} \\
+  &\text{eclair}
+\end{align*}
+and let us be focused on line 3, meaning that $B = \text{cherry}$ and $C = (3,5)$.
+If we delete the third line, changing $A$ to
+\begin{align*}
+  &\text{apple} \\
+  &\text{banana} \\
+  &\text{dog} \\
+  &\text{eclair}
+\end{align*}
+then we must refocus the $B$ and $C$ views on another line. 
+The following options are reasonable outputs to this operation:
+\begin{center}\begin{tabular}{c c c}
+  Description & $B$ & $C$ \\
+  \hline
+  Jump to the beginning & apple & $(1,4)$ \\
+  Jump to the end & eclair & $(4,4)$ \\
+  Jump to the next line & dog & $(3,4)$ \\
+  Jump to the previous line & banana & $(2,4)$ \\
+  Jump to the (round $\frac 3 5 4$)th line & banana & $(2,4)$
+\end{tabular}\end{center}
+
+While the ``next line'' and ``previous line'' options make sure
+the edit buffer stays in the same general area in the file, the
+last option allows the edit buffer to scale through the buffer.
+This effect becomes more prominent if the $B$ buffer holds
+more than one line. 
+
+On the other hand, what if our goal is to delete the line given
+by $B$ and propagate the update to $A$ and $C$? When we update
+$B = <\texttt{deleted}>$, we can change $A$ to be the desired
+\begin{align*}
+  &\text{apple} \\
+  &\text{banana} \\
+  &\text{dog} \\
+  &\text{eclair}.
+\end{align*}
+But what do we expect for $C$? In a standard
+text editor, we would expect the cursor to jump to the next line,
+and then fill the $B$ buffer with that line. But our lenses
+likely would not accommodate that kind of feedback.
+Therefore the only possible output
+for $C$ is a ``non-existent'' marking, like $(-1,4)$. 
+
+\subsection*{Function focusing}
+
+For this example we have three structures: 
+$A$ contains a function $f : \alpha \rightarrow \beta$;
+$B$ contains an input $b : \alpha$; and 
+$C$ contains some output $c : \beta$. The
+lens is in sync if $f(b) = c$. 
+
+If we change the value of $f$ to $f':\alpha \rightarrow \beta$,
+we must update $C$ to $f'(b)$ in order to stay in sync. 
+
+If we change $B$ to some $b' : \alpha$, we have two options. 
+First, we might update $C$ to contain $f(b')$; this option
+represents a look-up. 
+Second, we might change $A$ to refer to the function 
+\[ \lambda v. \text{ if } v=b' \text{ then } c \text{ else } f~v. \]
+
+Similarly, if we change $C$ to some $c' : \beta$, we should update $A$ to 
+refer to 
+\[ \lambda v. \text{ if } v=b \text{ then } c' \text{ else } f~v. \]
+
+\subsection*{Wikipedia structure}
+
+The next example has the property that one of the three structures encompass
+all the information held by the other two. 
+
+Wikipedia articles include the following three parts: $A$, the source which is
+a list of headings $h_i$, content $c_i$ and authors $a_i$; $B$, the table of
+contents which consists of headings and authors; and $C$, the article body
+which consists of headings and content. The layout is summarized as follows:
+\begin{center} \begin{tabular}{c c c}
+    Source & Table of Contents & Body \\
+    \hline
+    $h_1,c_1,a_1$ & $h_1,a_1$ & $h_1,c_1$ \\
+    $h_2,c_2,a_2$ & $h_2,a_2$ & $h_2,c_2$ \\
+    $h_3,c_3,a_3$ & $h_3,a_3$ & $h_3,c_3$ 
+\end{tabular} \end{center}
+Every update to the source $A$ can be propagated to $B$ and $C$ by
+simple projections. On the other hand, updates to $B$ can be
+put into $A$ and then projected from $A$ to $C$; the same holds
+for updates to $C$. Therefore, every operation by this lens
+can be seen as a combination of get and putback functions 
+between $A \leftrightarrow B$ and $A \leftrightarrow C$. 
+
+\subsection*{Partition}
+
+We can view the partition lens perhaps more naturally as a lens
+between three data structures: 
+\begin{align*}
+  A \subset (X + Y)^\ast \qquad B \subset X^\ast \qquad C \subset Y^\ast
+\end{align*}
+The behavior is almost exactly the same as the traditional partition
+problem. Updates to $A$ project to $B$ and $C$ as expected. Updates to
+$B$ affect $A$ but not $C$, and vice verse. The only caveat is
+that while the traditional partition can accommodate simultaneous
+updates to $B$ and $C$, the three-way version can only update
+$B$ and $C$ independently. 
+
+\subsection*{List concatenation} 
+
+To motivate list concatenation, suppose we have three data structures:
+$A$ which records a first name, $B$ which records a last name, and
+$C$ which is the concatenation of $A$ and $B$. Changes to $A$ and $B$
+can easily result in an update to $C$. The interesting point is when
+an update is made to $C$ which adds a word between the first and
+last name. Since that insertion may be a first name or a last name,
+the separation again is ambiguous. 
+
+As an example, consider the names Sandy \emph{dos} Santos\footnote{dos Santos
+is a popular Portuguese and Spanish last name.}
+and Junie \emph{B.} Jones\footnote{The protagonist of a children's
+book series, Junie B. gets mad at anyone who refuses to call her by her chosen
+first name.}
+
+
+\end{document}
