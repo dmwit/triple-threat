@@ -1,5 +1,5 @@
 GRAPHS := $(patsubst %.dot,%.eps,$(wildcard graphs/*.dot))
-TEX := pdflatex -halt-on-error
+TEX := pdflatex -interaction=nonstopmode
 
 examples.pdf: examples.tex $(GRAPHS)
 	$(TEX) examples
