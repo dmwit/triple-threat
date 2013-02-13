@@ -203,9 +203,19 @@ of the merge.
 \subsection*{Database Operations}
 
 In certain contexts, it might be valuable to view operations on relational
-databases as lenses. We can represent get functions by SELECT INTO statements
+databases as lenses. Though good practice in relational database
+design specifies that databases should not hold overlapping content,
+in actuality it might be convenient to have two perminant tables
+which share some information. These must both be able to be updated
+independently, and their updates propogated to the other table.
+
+We can represent get functions by SELECT INTO statements
 and put functions by UPDATE statements, which take the old state of the
 table into account. WHERE clauses represent constraints we have on the lenses. 
+In the previous examples, the constraints modify the \emph{value} of the update.
+Here, the constraints modify the \emph{range} of the update. 
+Are these the constraints that we want, or are they just
+generalized lenses?
 
 \subsubsection*{Select}
 
@@ -246,7 +256,9 @@ The result is the following updated table:
     & Adam Aardvark-Albatross
 \end{tabular} \end{center}
 The putback function uses the same constraint to update the \textsc{jobs}
-table as it used to select into the \textsc{ceo} table. 
+table as it used to select into the \textsc{ceo} table. It
+is not clear that the constraint should always be the same in the put direction
+as it is in the get direction, as we see in the upcoming join example.
 \begin{quote}
     UPDATE \textsc{jobs} \\
     SET name = \textsc{ceo}.name \\
@@ -319,7 +331,10 @@ table (as, in this case, no change is made in \textsc{jobs}).
     SET B.boss\_id = J2.id \\
     WHERE B.id = J1.id
 \end{quote}
-This update results in the expected \textsc{bosses} table:
+Here, the putback operation's constraints do not match
+the get operation's constraints; while before we matched
+on id's, here we must match on names. 
+However, the update results in the expected \textsc{bosses} table:
 \begin{center} \begin{tabular} {c | c c }
     \textsc{bosses} & id & boss\_id \\
     \hline
