@@ -200,14 +200,11 @@ of the merge.
 
 \subsection*{Database Operations}
 
-In certain contexts, it might be valuable to view operations on relational
-databases as lenses. We can represent get functions by SELECT INTO statements
-and put functions by UPDATE statements, which take the old state of the
-table into account. WHERE clauses represent constraints we have on the lenses. 
+We explore the possibility of representing select statements
+on relational databases as lenses and using constraints to
+narrow the range of selected data. 
 
-\subsubsection*{Select}
-
-Let's start with a simple SELECT statement example.
+Let's start with a simple example.
 Let \textsc{jobs} be the following table, describing the jobs of employees
 at a company.
 \begin{center} \begin{tabular} {c | c c c}
@@ -218,39 +215,37 @@ at a company.
     & 3 & Charlie Camel & VP of Engineering \\
     & 4 & Diane Duck & Software Engineer
 \end{tabular} \end{center}
-A simple select statement picks out the name of the CEO.
+A simple select statement picks out the CEO.
 \begin{quote}
-    SELECT name \\
+    SELECT * \\
     INTO \textsc{ceo} \\
     FROM \textsc{jobs} \\
     WHERE title=`CEO'
 \end{quote}
 This produces a table \textsc{ceo} as follows:
-\begin{center} \begin{tabular} {c | c}
-    \textsc{ceo} & name\\
+\begin{center} \begin{tabular} {c | c c c}
+    \textsc{ceo} & id & name & title \\
     \hline
-    & Adam Aardvark
+    & 1 & Adam Aardvark & CEO
 \end{tabular} \end{center}
-Suppose Adam gets married and wants to change his name to a
-hyphenated version. The following query updates the \textsc{ceo} table:
-\begin{quote}
-    UPDATE \textsc{ceo} \\
-    SET name=Adam Aardvark-Albatross
-\end{quote}
-The result is the following updated table:
-\begin{center} \begin{tabular} {c | c}
-    \textsc{ceo} & name\\
+This operation might be viewed as a filter lens, in which
+case the constraint that we are picking out the CEO from the
+\textsc{jobs} table is static. 
+But we could also view the choice of CEO as a run-time event.
+Consider a \emph{subset lens}, which picks out an arbitrary subset of 
+a table. If we impose a constraint on the resulting subset, we
+can dynamically shape what that subset is. By imposing the constraint
+``\textsc{ceo}.title = CEO'' on the data, we get the desired result.
+
+The putback direction of the subset lens is deterministic given correct alignment
+of the tables.
+Changing the CEO's name, for example, results in the following updated
+\textsc{ceo} and \textsc{jobs} tables:
+\begin{center} \begin{tabular} {c | c c c}
+    \textsc{ceo} & id & name & title\\
     \hline
-    & Adam Aardvark-Albatross
+    & 1 & Adam Aardvark-Albatross & CEO
 \end{tabular} \end{center}
-The putback function uses the same constraint to update the \textsc{jobs}
-table as it used to select into the \textsc{ceo} table. 
-\begin{quote}
-    UPDATE \textsc{jobs} \\
-    SET name = \textsc{ceo}.name \\
-    WHERE title = `CEO' 
-\end{quote}
-The result is the following:
 \begin{center} \begin{tabular} {c | c c c}
     \textsc{jobs} & id & name & title \\
     \hline
@@ -260,71 +255,22 @@ The result is the following:
     & 4 & Diane Duck & Software Engineer
 \end{tabular} \end{center}
 
-\subsubsection*{Join}
-
-Consider the JOIN operation as a function from a pair of tables to a single
-table. We might also want to move from a single table back to the 
-separate pairs. Let's start with two tables, \textsc{jobs} as before,
-and \textsc{bosses} which gives the id numbers of employees and their bosses.
+Instead, what if we insert an entry into the \textsc{ceo} table, as follows:
+\begin{center} \begin{tabular} {c | c c c}
+    \textsc{ceo} & id & name & title \\
+    \hline
+    & 1 & Adam Aardvark & CEO \\
+    & 5 & Emma Elephant & Sales Representative
+\end{tabular} \end{center}
+The update to \textsc{jobs} should recognize the insertion as well.
 \begin{center} \begin{tabular} {c | c c c}
     \textsc{jobs} & id & name & title \\
     \hline
-    & 1 & Adam Aardvark & CEO \\
+    & 1 & Adam Aardvark-Albatross & CEO \\
     & 2 & Brian Badger & VP of Sales \\
     & 3 & Charlie Camel & VP of Engineering \\
-    & 4 & Diane Duck & Software Engineer
-\end{tabular} \end{center}
-\begin{center} \begin{tabular} {c | c c }
-    \textsc{bosses} & id & boss\_id \\
-    \hline
-    & 1 & 1 \\
-    & 2 & 1 \\
-    & 3 & 1 \\
-    & 4 & 3 
-\end{tabular} \end{center}
-Using the JOIN operation, we can write the following query which lists 
-the names of employees along with the names of their boss.
-\begin{quote}
-    SELECT J1.name, J2.name \\
-    INTO \textsc{named\_bosses} \\
-    FROM \textsc{jobs} J1 JOIN \textsc{bosses} B JOIN \textsc{jobs} J2 \\
-    ON J1.id = B.id AND B.boss\_id=J2.id
-\end{quote}
-The result is the following:
-\begin{center} \begin{tabular} {c | c c }
-    \textsc{named\_bosses} & name & boss\_name \\
-    \hline
-    & Adam Aardvark & Adam Aardvark \\
-    & Brian Badger & Adam Aardvark \\
-    & Charlie Camel & Adam Aardvark \\
-    & Diane Duck & Charlie Camel
-\end{tabular} \end{center}
-If we change Diane Duck's boss to Brian Badger, we get
-\begin{center} \begin{tabular} {c | c c }
-    \textsc{named\_bosses} & name & boss\_name \\
-    \hline
-    & Adam Aardvark & Adam Aardvark \\
-    & Brian Badger & Adam Aardvark \\
-    & Charlie Camel & Adam Aardvark \\
-    & Diane Duck & Brian Badger
-\end{tabular} \end{center}
-The change needs to be reflected back into the \textsc{bosses}
-table (as, in this case, no change is made in \textsc{jobs}).
-\begin{quote}
-    UPDATE \textsc{bosses} \\
-    FROM \textsc{jobs} J1 JOIN \textsc{named\_bosses} N JOIN \textsc{jobs} J2 \\
-    ON J1.name = N.name AND N.boss\_name = J2.name \\
-    SET B.boss\_id = J2.id \\
-    WHERE B.id = J1.id
-\end{quote}
-This update results in the expected \textsc{bosses} table:
-\begin{center} \begin{tabular} {c | c c }
-    \textsc{bosses} & id & boss\_id \\
-    \hline
-    & 1 & 1 \\
-    & 2 & 1 \\
-    & 3 & 1 \\
-    & 4 & 2 
+    & 4 & Diane Duck & Software Engineer \\
+    & 5 & Emma Elephant & Sales Representative
 \end{tabular} \end{center}
 
 
