@@ -6,7 +6,7 @@ Google Scholar search for "bidirectional spreadsheet":
     * Bidirectional transformation of model-driven spreadsheets -- probably not relevant
     * patent on Data-bidirectional spreadsheet -- questionably relevant
     * Towards the Bidirectionalization of Spreadsheet Formulas -- relevant, but short, perhaps there were followups? if not, maybe ask them why it was hard/uninteresting
-Tableau (tableausoftware.com)
+Tableau (tableausoftware.com); see also http://www.graphics.stanford.edu/projects/polaris/
 browse HCI journals of the last few years to look for people to contact -- even related but not identical ideas should be good people to ask about whether there's work in the area
 5000 spreadsheets: http://esquared.unl.edu/wikka.php?wakka=EUSESSpreadsheetCorpus
 
