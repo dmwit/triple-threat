@@ -8,6 +8,7 @@ Google Scholar search for "bidirectional spreadsheet":
     * Towards the Bidirectionalization of Spreadsheet Formulas -- relevant, but short, perhaps there were followups? if not, maybe ask them why it was hard/uninteresting
 Tableau (tableausoftware.com)
 browse HCI journals of the last few years to look for people to contact -- even related but not identical ideas should be good people to ask about whether there's work in the area
+5000 spreadsheets: http://esquared.unl.edu/wikka.php?wakka=EUSESSpreadsheetCorpus
 
 ...related to constraint lenses, which will likely have to appear in some form or other if we're going to allow locking cells in the spreadsheet:
 constraint logic programming
