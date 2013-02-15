@@ -1,0 +1,14 @@
+a random hodge-podge of notes on people to contact, papers to follow up, keywords to search for, etc.
+
+Simon Peyton Jones
+Margarette (sp?) Burnett
+Google Scholar search for "bidirectional spreadsheet":
+    * Bidirectional transformation of model-driven spreadsheets -- probably not relevant
+    * patent on Data-bidirectional spreadsheet -- questionably relevant
+    * Towards the Bidirectionalization of Spreadsheet Formulas -- relevant, but short, perhaps there were followups? if not, maybe ask them why it was hard/uninteresting
+Tableau (tableausoftware.com)
+browse HCI journals of the last few years to look for people to contact -- even related but not identical ideas should be good people to ask about whether there's work in the area
+
+...related to constraint lenses, which will likely have to appear in some form or other if we're going to allow locking cells in the spreadsheet:
+constraint logic programming
+convex hulls (what are these?)
