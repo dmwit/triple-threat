@@ -8,6 +8,9 @@
 \newcommand{\centeredgraph}[1]{\begin{center}\graph{#1}\end{center}}
 \newcommand{\inlinegraph}[1]{\scaledgraph{0.2}{#1}}
 \newcommand\Sum{\texttt{sum}}
+\newcommand\If{\texttt{if}}
+\newcommand\Then{\texttt{then}}
+\newcommand\Else{\texttt{else}}
 \newcommand\Int{\texttt{int}}
 \newcommand\Float{\texttt{float}}
 \newcommand\F{\texttt F}
@@ -15,6 +18,7 @@
 \renewcommand\L{\texttt L}
 \newcommand\R{\texttt R}
 \newcommand\Fail{\texttt{fail}}
+\newcommand\cell[1]{\mathsf{#1}}
 
 \newcommand\form[4]{#1 \rightarrow #2, #3 \qquad \qquad #4}
 \begin{document}
@@ -563,4 +567,40 @@ book series, Junie B. gets mad at anyone who refuses to call her by her chosen
 first name.}
 
 
+\section{Spreadsheet}
+\subsection{Unit conversion}
+\begin{align*}
+    \cell{B1} &= 2.54*\cell{A1}
+\end{align*}
+
+\subsection{Profit calculation}
+\begin{align*}
+    \cell{D1} &= \cell{B1}*\cell{C1} \\
+    \cell{E1} &= \cell{B1}-\cell{D1}-\cell{A1}
+\end{align*}
+
+\subsection{Expense report}
+Suppose we know there are four categories of expense and three days.
+\begin{align*}
+    \cell{D1} &= \Sum(\cell{A1}:\cell{C1}) \\
+    \cell{D2} &= \Sum(\cell{A2}:\cell{C2}) \\
+    \cell{D3} &= \Sum(\cell{A3}:\cell{C3}) \\
+    \cell{D4} &= \Sum(\cell{A4}:\cell{C4}) \\
+    \\
+    \cell{A5} &= \Sum(\cell{A1}:\cell{A4}) \\
+    \cell{B5} &= \Sum(\cell{B1}:\cell{B4}) \\
+    \cell{C5} &= \Sum(\cell{C1}:\cell{C4}) \\
+    \\
+    \cell{D5} &= \Sum(\cell{A1}:\cell{C4})
+\end{align*}
+
+Note that the last equation is a free choice -- lots of ways to compute this
+number, and maybe have different behaviors when updating the total! One
+choice might even be something like
+
+\begin{align*}
+    \cell{D5} ={}& \If\ \Sum(\cell{D1}:\cell{D4})=\Sum(\cell{A5}:\cell{C5}) \\
+    & \Then\ \Sum(\cell{A5}:\cell{C5}) \\
+    & \Else\ \Fail
+\end{align*}
 \end{document}
