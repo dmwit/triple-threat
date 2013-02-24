@@ -1,31 +1,74 @@
 a random hodge-podge of notes on people to contact, papers to follow up, keywords to search for, etc.
 
-Simon Peyton Jones
-Margarette (sp?) Burnett
-Google Scholar search for "bidirectional spreadsheet":
-    * Bidirectional transformation of model-driven spreadsheets -- probably not relevant
-    * patent on Data-bidirectional spreadsheet -- questionably relevant
-    * Towards the Bidirectionalization of Spreadsheet Formulas -- relevant, but short, perhaps there were followups? if not, maybe ask them why it was hard/uninteresting
-Tableau (tableausoftware.com); see also http://www.graphics.stanford.edu/projects/polaris/
 browse HCI journals of the last few years to look for people to contact -- even related but not identical ideas should be good people to ask about whether there's work in the area
-5000 spreadsheets: http://esquared.unl.edu/wikka.php?wakka=EUSESSpreadsheetCorpus
-FATBIT project: http://wiki.di.uminho.pt/twiki/bin/view/Research/FATBIT/WebHome
-constraint programming and spreadsheets
-    * A Spreadsheet Interface For Logic Programming http://dl.acm.org/citation.cfm?doid=67450.67466
-    * Survey: Practical Applications of Constraint Programming http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.43.9494&rep=rep1&type=pdf
-    * Forms/3: A first-order visual language to explore the boundaries of the spreadsheet paradigm ftp://ftp.engr.orst.edu/pub/burnett/Forms3.JFP.pdf
-Operation transforms for a distributed shared spreadsheet: http://dl.acm.org/citation.cfm?id=289474
-    (not all that relevant, but gives one possible approach to updating the formula/value pair: just clobber the formula)
-A spreadsheet based on constraints: http://dl.acm.org/citation.cfm?doid=168642.168664
-    very relevant! instead of giving formulas for particular cells, the relationship between cells is specified and an update to any of the related cells causes the others to recompute
-An Explanation-Based, Visual Debugger for One-way Constraints: http://academic.research.microsoft.com/Publication/1242101/an-explanation-based-visual-debugger-for-one-way-constraints
-    allowing people to run a spreadsheet "backwards" to figure out why a particular cell has a particular value
-multi-way constraints and spreadsheets:
-    * Analyzing and Debugging Hierarchies of Multi-Way Local Propagation Constraints: http://pdf.aminer.org/000/548/003/analyzing_and_debugging_hierarchies_of_multi_way_local_propagation_constraints.pdf
-    * Graphical Techniques in a Spreadsheet for Specifying User Interfaces: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.18.3001&rep=rep1&type=pdf
-    * User Interface Specification Using an Enhanced Spreadsheet Model: http://smartech.gatech.edu/bitstream/handle/1853/3630/93-20.pdf?sequence=1
-    * Multi-way versus One-way Constraints in User Interfaces: Experience with the DeltaBlue Algorithm: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.38.2714&rep=rep1&type=pdf
 
 ...related to constraint lenses, which will likely have to appear in some form or other if we're going to allow locking cells in the spreadsheet:
 constraint logic programming
 convex hulls (what are these?)
+
+Related People
+-------------
+Simon Peyton Jones
+Margaret Burnett
+
+FABIT Project: http://wiki.di.uminho.pt/twiki/bin/view/Research/FATBIT/WebHome
+------------------------------------------------------------------------------
+Bidirectional transformation of model-driven spreadsheets
+  - Model-driven spreadsheets describe the structure of the spreadsheet
+  - the bidirectional transformations here convert between different spreadsheet models
+Towards the bidirectionalization of spreadsheet formulas
+  - Poster abstract, describes idea for lenses as bidirectional formulas in spreadsheet cells
+  - Very relevent, and the group might be doing current work in the area. Contact?
+
+
+Spreadsheet Corpus: http://esquared.unl.edu/wikka.php?wakka=EUSESSpreadsheetCorpus
+----------------------------------------------------------------------------------
+  - Daniel sent email request
+
+Spreadsheet Paradigm
+--------------------
+Tableau Softaware: tableausoftware.com
+  - Basic idea: visual data exploration
+  - Based on Polaris project: http://www.graphics.stanford.edu/projects/polaris/
+Forms/3: A first-order visual language to explore the boundaries of the spreadsheet paradigm ftp://ftp.engr.orst.edu/pub/burnett/Forms3.JFP.pdf
+User interface specification using an enhanced spreadsheet model: http://smartech.gatech.edu/bitstream/handle/1853/3630/93-20.pdf?sequence=1
+  - Design user interfaces without explicit programming
+
+Patents
+-------
+Data-bidirectional spreadsheet: http://www.google.com/patents/US20040044954
+  - Describes using variables in a spreadsheet that were defined outside the spreadsheet
+  - Allows edits to the variable inside the spreadsheet to be propogated outside the spreadsheet
+Method of bidirectional recalculation: http://www.google.com/patents/US5339410
+  
+Constraint Programming and Spreadsheets
+---------------------------------------
+* A spreadsheet interface for logic programming: http://dl.acm.org/citation.cfm?doid=67450.67466
+* Practical applications of constraint programming: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.43.9494&rep=rep1&type=pdf
+  - 1995 survey of constraint programming
+* A spreadsheet based on constraints: http://dl.acm.org/citation.cfm?doid=168642.168664
+  - very relevant! instead of giving formulas for particular cells, the relationship between cells is specified and an update to any of the related cells causes the others to recompute
+* An explanation-based, visual debugger for one-way constraints: http://academic.research.microsoft.com/Publication/1242101/an-explanation-based-visual-debugger-for-one-way-constraints
+  - allowing people to run a spreadsheet "backwards" to figure out why a particular cell has a particular value
+
+Multi-way Constraints and Spreadsheets
+---------------------------------------
+* Analyzing and debugging hierarchies of multi-way local propagation constraints: http://pdf.aminer.org/000/548/003/analyzing_and_debugging_hierarchies_of_multi_way_local_propagation_constraints.pdf
+* Multi-way versus one-way constraints in user interfaces: Experience with the DeltaBlue Algorithm: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.38.2714&rep=rep1&type=pdf
+* Graphical techniques in a spreadsheet for specifying user interfaces: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.18.3001&rep=rep1&type=pdf
+  - Use spreadsheets to define constraints, instead of using constraints to define spreadsheets
+
+Distributed Spreadsheets
+------------------------
+Operation transforms for a distributed shared spreadsheet: http://dl.acm.org/citation.cfm?id=289474
+  - not all that relevant, but gives one possible approach to updating the formula/value pair: just clobber the formula
+
+
+Structured Spreadsheets
+------------------------
+UCheck: A spreadsheet type checker for end users: http://web.engr.oregonstate.edu/~erwig/papers/UCheck_JVLC07.pdf
+  - Automatically detects errors by means of a unit reasoning system
+Automatic generation and maintenance of correct spreadsheets: http://dl.acm.org/citation.cfm?id=1062494
+  - Syntax for generating spreadsheet templates
+An end-user oriented graph-based visualization for spreadsheets: http://dl.acm.org/citation.cfm?id=1370866
+  - Visualize data flow in a spreadsheet
