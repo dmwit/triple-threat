@@ -48,8 +48,12 @@ Constraint Programming and Spreadsheets
   - 1995 survey of constraint programming
 * A spreadsheet based on constraints: http://dl.acm.org/citation.cfm?doid=168642.168664
   - very relevant! instead of giving formulas for particular cells, the relationship between cells is specified and an update to any of the related cells causes the others to recompute
+  - actually a bit disappointing: only equality constraints, doesn't say much about what language is allowed in the equalities, ships out to Mathematica and doesn't try to characterize which constraints will succeed, fail, or return multiple answers
 * An explanation-based, visual debugger for one-way constraints: http://academic.research.microsoft.com/Publication/1242101/an-explanation-based-visual-debugger-for-one-way-constraints
   - allowing people to run a spreadsheet "backwards" to figure out why a particular cell has a particular value
+* A Declarative Programming Environment Based on Constraints
+  - another take, but as a paper it is fairly content-free; hardly more than "we wrote a piece of software" without even saying very much about what the software does, let alone how it does it
+* HotDoc: A Flexible Framework for Spatial Composition: http://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=626563
 
 Multi-way Constraints and Spreadsheets
 ---------------------------------------
