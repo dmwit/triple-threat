@@ -567,20 +567,91 @@ book series, Junie B. gets mad at anyone who refuses to call her by her chosen
 first name.}
 
 
-\section{Spreadsheet}
+\section{Spreadsheets}
+In this section, we will explore examples of bidirectional spreadsheets.
+
 \subsection{Unit conversion}
+One bidirectional transformation is conversion between units, like inches
+to centimeters.
+\begin{center}\begin{tabular}{c | c | c |}
+    & \cell{A} & \cell{B} \\
+    & in & cm \\
+    \hline
+    \cell 1 & & \\
+    \hline
+\end{tabular}\end{center}
+Given either \cell{A1} or \cell{B1}, we compute
+the other by means of the bidirectional equation
 \begin{align*}
-    \cell{B1} &= 2.54*\cell{A1}
+    \cell{B1} &= 2.54*\cell{A1}.
 \end{align*}
 
 \subsection{Profit calculation}
+Consider the following table:
+\begin{center}\begin{tabular}{c | c | c | c | c | c |}
+    & \cell A & \cell B & \cell C & \cell D & \cell E \\
+    & Cost & Price & \% Tax & Tax & Profit \\
+    \hline
+  1 & & & & & \\
+    \hline
+\end{tabular}\end{center}
+The constraints on the table can be expressed as follows:
 \begin{align*}
-    \cell{D1} &= \cell{B1}*\cell{C1} \\
+    \cell{D1} &= \cell{B1}\times\cell{C1} \\
     \cell{E1} &= \cell{B1}-\cell{D1}-\cell{A1}
 \end{align*}
+That is, the tax is calculated from the percent tax and the price,
+and the profit is the price minus the cost and the tax. 
+There are several ambiguities associated with the satisfiability of these
+equations. 
+\begin{itemize}
+    \item For the purposes of this example, we can assume that if a cell on the
+    right-hand side of either of these equations is updated, we should update only
+    the left-hand-side and fix the value of the other cells on the right-hand side. 
+    For example, if \cell{C1}(\% Tax) is updated, we should update \cell{D1}(Tax)
+    but not \cell{B1}(Price).
+    \item If \cell{B1}(Price) is updated, we need to update both \cell{D1}(Tax) and 
+    \cell{E1}(Profit). However, profit depends on tax, which means that
+    \emph{the order of the updates matters}. 
+    \item If \cell{D1}(Tax) is updated, how do we edit the price and percent tax?
+    In the context of this update, we likely want to \emph{lock} the cell \cell{C1} (\% Tax)
+    and only update \cell{B1}.
+    \item Similarly, if \cell{E1}(Profit) is updated, we want to lock the cells
+    \cell{D1}(Tax) and \cell{A1}(Cost) and change only \cell{B1}(Price). However,
+    tax depends on price, so changing \cell{B1} changes \cell{D1}, which changes \cell{E1}
+    again. Instead, we have to update the tax and price concurrently. 
+\end{itemize}
+The second and fourth notes above are problems because the two equations
+shown are mutually dependent, in a sense. To fix this, we could instead use
+the following two equivalent equations:
+\begin{align*}
+    \cell{D1} &= \cell{B1}\times\cell{C1} \\
+    \cell{E1} &= \cell{B1}-\cell{B1}\times\cell{C1}-\cell{A1}
+\end{align*}
+In order to figure this out, it is necessary to analyze the dependencies
+of all formulas in the spreadsheet. 
+
 
 \subsection{Expense report}
-Suppose we know there are four categories of expense and three days.
+
+Suppose there are four categories of expense and three days.
+\begin{center}\begin{tabular}{ c c | c | c | c | c |}
+    & & \cell A & \cell B & \cell C & \cell D \\
+    & & Day 1 & Day 2 & Day 3 & Total \\
+    \hline
+    \cell1 & Meals & 20 & 25 & 15 & 60 \\
+    \hline
+    \cell2 & Travel & 50 & 0 & 55 & 105 \\
+    \hline
+    \cell3 & Registration & 100 & 0 & 0 & 100 \\
+    \hline
+    \cell4 & Lodging & 100 & 100 & 0 & 200 \\
+    \hline
+    \cell5 & Total & 270 & 125 & 70 & 465 \\
+    \hline
+\end{tabular}\end{center}
+We use the following equations to represent the horizontal
+and vertical subtotals:
 \begin{align*}
     \cell{D1} &= \Sum(\cell{A1}:\cell{C1}) \\
     \cell{D2} &= \Sum(\cell{A2}:\cell{C2}) \\
@@ -589,18 +660,24 @@ Suppose we know there are four categories of expense and three days.
     \\
     \cell{A5} &= \Sum(\cell{A1}:\cell{A4}) \\
     \cell{B5} &= \Sum(\cell{B1}:\cell{B4}) \\
-    \cell{C5} &= \Sum(\cell{C1}:\cell{C4}) \\
-    \\
-    \cell{D5} &= \Sum(\cell{A1}:\cell{C4})
+    \cell{C5} &= \Sum(\cell{C1}:\cell{C4})
 \end{align*}
-
-Note that the last equation is a free choice -- lots of ways to compute this
-number, and maybe have different behaviors when updating the total! One
-choice might even be something like
-
+For the grand total (cell \cell{D5}) we have a few options.
 \begin{align*}
+    \cell{D5} ={}& \Sum(\cell{A1}:\cell{C4}) \\
+    \cell{D5} ={}& \Sum(\cell{D1}:\cell{D4}) \\
+    \cell{D5} ={}& \Sum(\cell{A5}:\cell{C5}) \\
     \cell{D5} ={}& \If\ \Sum(\cell{D1}:\cell{D4})=\Sum(\cell{A5}:\cell{C5}) \\
     & \Then\ \Sum(\cell{A5}:\cell{C5}) \\
     & \Else\ \Fail
 \end{align*}
+
+Assume we use the last option. If we want to limit travel costs to \$100,
+we proceed as follows:
+\begin{enumerate}
+    \item Set $\cell{D2}=100$. 
+    \item Distribute the updated sum across to cells \cell{A2} to \cell{C2}.
+    \item Recalculate the vertical subtotals.
+    \item Compare the sums of the subtotals to compute the value of cell \cell{D5}. 
+\end{enumerate}
 \end{document}
