@@ -1,8 +1,11 @@
-{-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, NoMonomorphismRestriction #-}
 module Spreadsheet where
 
+import Control.Applicative
 import Data.Map
 import Data.Tree
+import System.Environment
+import Text.Parsec hiding (many, optional, (<|>))
 
 
 type CellName = String
@@ -16,10 +19,26 @@ data Formula
 	| BinOp Op Formula Formula
 	deriving (Eq, Ord, Show, Read)
 
+data Equation = Equation CellName Formula deriving (Eq, Ord, Show, Read)
+
 data Op = Plus | Minus deriving (Eq, Ord, Show, Read)
 
 
--- pretty printer 
+data Spreadsheet = Spreadsheet
+	{ formulas     :: SpreadsheetFormulas
+	, values       :: SpreadsheetValues
+	, dependencies :: DependencyGraph
+	} deriving (Eq, Ord, Show, Read)
+                   
+updateValues :: SpreadsheetValues -> Spreadsheet -> Spreadsheet
+updateValues new_values sheet = Spreadsheet (formulas sheet) new_values (dependencies sheet)
+updateValue :: CellName -> Value -> Spreadsheet -> Spreadsheet
+updateValue name val sheet = updateValues (insert name val (values sheet)) sheet
+
+
+----------------------------------------------------------------- 
+------------------- Pretty Printer ------------------------------
+
 class PPrint a where pprint :: a -> String
 
 instance PPrint SpreadsheetFormulas where
@@ -44,17 +63,31 @@ instance PPrint DependencyGraph where
 instance PPrint [CellName] where
         pprint []            = ""
         pprint (cellName:ls) = cellName ++ pprint ls
+        
+        
+----------------------------------------------------------------- 
+---------------------------- Parser -----------------------------
 
-data Spreadsheet = Spreadsheet
-	{ formulas     :: SpreadsheetFormulas
-	, values       :: SpreadsheetValues
-	, dependencies :: DependencyGraph
-	} deriving (Eq, Ord, Show, Read)
-                   
-updateValues :: SpreadsheetValues -> Spreadsheet -> Spreadsheet
-updateValues new_values sheet = Spreadsheet (formulas sheet) new_values (dependencies sheet)
-updateValue :: CellName -> Value -> Spreadsheet -> Spreadsheet
-updateValue name val sheet = updateValues (insert name val (values sheet)) sheet
+parseCellName = many1 (noneOf " >")
+
+class    Parseable a       where parser :: Stream s m Char => ParsecT s u m a
+instance Parseable Op      where parser = (string "+" >> return Plus) <|> (string "-" >> return Minus)
+instance Parseable Formula where
+	parser = chainl1 (parens <|> cell) (BinOp <$> parser) where
+		cell   = string "<" *> (Cell <$> parseCellName) <* string ">"
+		parens = string "(" *> parser <* string ")"
+
+instance Parseable Equation where
+	parser = do
+		n <- parseCellName
+		string " = "
+		f <- parser
+		return (Equation n f)
+
+instance Parseable SpreadsheetFormulas where
+	parser = munge <$> many (optional parser <* string "\n") where
+		munge xs = fromList [(n,f) | Just (Equation n f) <- xs]
+
                    
 
 ----------------------------------------------------------------- 
@@ -144,6 +177,12 @@ step_down sheet name =
   updateValues new_values sheet
 
 
-
-  
-  
+main = do
+	a <- getArgs
+	case a of
+		[fileName] -> do
+			s <- readFile fileName
+			case parse parser fileName s of
+				Left  err -> print err
+				Right eqs -> putStr . pprint $ (eqs :: SpreadsheetFormulas)
+		_ -> putStrLn "call with one argument naming a file with a bunch of equations, one on each line"
