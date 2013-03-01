@@ -10,7 +10,7 @@ import Text.Parsec hiding (many, optional, (<|>))
 
 
 type CellName = String
-type Value    = Integer
+type Value    = Double
 type SpreadsheetFormulas = Map CellName Formula
 type SpreadsheetValues   = Map CellName Value
 type DependencyGraph     = Map CellName [CellName]
@@ -102,16 +102,12 @@ instance Parseable SpreadsheetFormulas where
 -----------------------------------------------------------------
 ------------------- Lenses on cells -----------------------------
 
+op Plus  = (+)
+op Minus = (-)
+
 cell_get :: Formula -> SpreadsheetValues -> Maybe Value
-cell_get (Cell new_name)     values = Map.lookup new_name values
-cell_get (BinOp Plus f1 f2)  values = do
-  v1 <- cell_get f1 values
-  v2 <- cell_get f2 values
-  return (v1 + v2)
-cell_get (BinOp Minus f1 f2) values = do
-  v1 <- cell_get f1 values
-  v2 <- cell_get f2 values
-  return (v1 - v2)
+cell_get (Cell new_name) values = Map.lookup new_name values
+cell_get (BinOp o f1 f2) values = liftA2 (op o) (cell_get f1 values) (cell_get f2 values)
 
 cell_put :: Formula -> Value -> SpreadsheetValues -> SpreadsheetValues
 cell_put (Cell target)       val values = insert target val values
@@ -120,12 +116,12 @@ cell_put (BinOp Plus f1 f2)  val values =
   let v2_old = cell_get f2 values in
   case (v1_old,v2_old) of
     (Just v1_old,Just v2_old) ->
-      let v1_new = quot (val * v1_old) (v1_old + v2_old) in
+      let v1_new = (val * v1_old) / (v1_old + v2_old) in
       let v2_new = val - v1_new in
       let values' = cell_put f1 v1_new values in
       cell_put f2 v2_new values'
     (_,_) ->
-      let v1_new = quot val 2 in
+      let v1_new = val / 2 in
       let v2_new = val - v1_new in
       let values' = cell_put f1 v1_new values in
       cell_put f2 v2_new values'
@@ -134,7 +130,7 @@ cell_put (BinOp Minus f1 f2) val values =
   let v2_old = cell_get f2 values in
   case (v1_old,v2_old) of
     (Just v1_old,Just v2_old) ->
-      let v1_new = quot (val * v1_old) (v1_old - v2_old) in
+      let v1_new = (val * v1_old) / (v1_old - v2_old) in
       let v2_new = val - v1_new in
       let values' = cell_put f1 v1_new values in
       cell_put f2 v2_new values'
@@ -191,12 +187,9 @@ add_parent tr (child:ls) parent  =
   let tr'    = add_parent tr ls parent in
   insert child parent tr'
 
-add_children gr [] _ = gr
-add_children gr (child:ls) parent =
-  let gr' = add_children gr ls parent in
-  case Map.lookup parent gr' of
-       Just siblings -> insert parent (child:siblings) gr'
-       Nothing       -> insert parent [child]          gr'
+-- TODO: is first clause needed? just kept it because that's how old function behaved
+add_children gr [] parent = gr
+add_children gr ls parent = Map.insertWith (++) parent ls gr
 
 
 
