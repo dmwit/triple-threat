@@ -3,6 +3,7 @@ module Spreadsheet where
 
 import Control.Applicative
 import Data.Map
+import qualified Data.Map as Map
 import Data.Tree
 import System.Environment
 import Text.Parsec hiding (many, optional, (<|>))
@@ -13,6 +14,8 @@ type Value    = Integer
 type SpreadsheetFormulas = Map CellName Formula
 type SpreadsheetValues   = Map CellName Value
 type DependencyGraph     = Map CellName [CellName]
+--DependencyTree: Each cell gets mapped to its parent, if it has one
+type DependencyTree      = Map CellName CellName
 
 data Formula
 	= Cell CellName
@@ -27,7 +30,7 @@ data Op = Plus | Minus deriving (Eq, Ord, Show, Read)
 data Spreadsheet = Spreadsheet
 	{ formulas     :: SpreadsheetFormulas
 	, values       :: SpreadsheetValues
-	, dependencies :: DependencyGraph
+	, dependencies :: DependencyTree
 	} deriving (Eq, Ord, Show, Read)
                    
 updateValues :: SpreadsheetValues -> Spreadsheet -> Spreadsheet
@@ -60,9 +63,15 @@ instance PPrint Op where
 instance PPrint DependencyGraph where
         pprint m = unlines [cellName ++ " = " ++ pprint namesList | (cellName, namesList) <- assocs m]
         
+instance PPrint DependencyTree where
+        pprint m = unlines [cellName ++ " = " ++ name | (cellName, name) <- assocs m]
+        
 instance PPrint [CellName] where
         pprint []            = ""
-        pprint (cellName:ls) = cellName ++ pprint ls
+        pprint (cellName:ls) = cellName ++ ", " ++ pprint ls
+        
+instance PPrint Spreadsheet where
+        pprint sheet = unlines $ ["Formulas", pprint (formulas sheet), "Values", pprint (values sheet)]
         
         
 ----------------------------------------------------------------- 
@@ -93,21 +102,47 @@ instance Parseable SpreadsheetFormulas where
 ----------------------------------------------------------------- 
 ------------------- Lenses on cells -----------------------------
 
-cell_get :: Formula -> SpreadsheetValues -> Value
-cell_get (Cell new_name)     values = values ! new_name
-cell_get (BinOp Plus f1 f2)  values = cell_get f1 values + cell_get f2 values
-cell_get (BinOp Minus f1 f2) values = cell_get f1 values - cell_get f2 values
+cell_get :: Formula -> SpreadsheetValues -> Maybe Value
+cell_get (Cell new_name)     values = Map.lookup new_name values
+cell_get (BinOp Plus f1 f2)  values = do
+  v1 <- cell_get f1 values
+  v2 <- cell_get f2 values
+  return (v1 + v2)
+cell_get (BinOp Minus f1 f2) values = do
+  v1 <- cell_get f1 values                                    
+  v2 <- cell_get f2 values
+  return (v1 - v2)
 
 cell_put :: Formula -> Value -> SpreadsheetValues -> SpreadsheetValues
-cell_put (Cell target)      val values = insert target val values
-cell_put (BinOp Plus f1 f2) val values = 
+cell_put (Cell target)       val values = insert target val values
+cell_put (BinOp Plus f1 f2)  val values = 
   let v1_old = cell_get f1 values in
   let v2_old = cell_get f2 values in
-  let v1_new = quot (val * v1_old) (v1_old + v2_old) in
-  let v2_new = val - v1_new in
-  let values' = cell_put f1 v1_new values in
-  cell_put f2 v2_new values'
-  -- add MINUS
+  case (v1_old,v2_old) of
+    (Just v1_old,Just v2_old) -> 
+      let v1_new = quot (val * v1_old) (v1_old + v2_old) in
+      let v2_new = val - v1_new in
+      let values' = cell_put f1 v1_new values in
+      cell_put f2 v2_new values'
+    (_,_) -> 
+      let v1_new = quot val 2 in
+      let v2_new = val - v1_new in
+      let values' = cell_put f1 v1_new values in
+      cell_put f2 v2_new values'
+cell_put (BinOp Minus f1 f2) val values =
+  let v1_old = cell_get f1 values in
+  let v2_old = cell_get f2 values in
+  case (v1_old,v2_old) of
+    (Just v1_old,Just v2_old) -> 
+      let v1_new = quot (val * v1_old) (v1_old - v2_old) in
+      let v2_new = val - v1_new in
+      let values' = cell_put f1 v1_new values in
+      cell_put f2 v2_new values'
+    (_,_) -> 
+      let v1_new = val in
+      let v2_new = 0 in
+      let values' = cell_put f1 v1_new values in
+      cell_put f2 v2_new values'
                                    
                              
 --------------------------------------------------------------------
@@ -120,61 +155,95 @@ addFormula formulas name formula = insert name formula formulas
 -- 2 -- build a dependency graph from the formulas given, and check
 --      that the graph forms a tree
 finalize :: SpreadsheetFormulas -> Maybe Spreadsheet
-build_dependencies :: SpreadsheetFormulas -> [CellName] -> DependencyGraph
+build_dependencies :: SpreadsheetFormulas -> [CellName] -> DependencyTree
+build_backwards_dependencies :: SpreadsheetFormulas -> [CellName] -> DependencyGraph
 get_children :: Formula -> [CellName]
-add_parent :: DependencyGraph -> [CellName] -> CellName -> DependencyGraph
+add_parent :: DependencyTree -> [CellName] -> CellName -> DependencyTree
+add_children :: DependencyGraph -> [CellName] -> CellName -> DependencyGraph
 
-build_dependencies formulas []         = fromList []
+-- Builds a DependencyTree where every cell points to its parent,
+-- a node whose formula points to it.
+build_dependencies formulas []        = Map.empty
 build_dependencies formulas (name:ls) = 
-  let gr       = build_dependencies formulas ls in
-  let children = get_children (formulas ! name) in
-  add_parent gr children name
+  let tr       = build_dependencies formulas ls in
+  let children = case Map.lookup name formulas of
+                      Just formula -> get_children formula
+                      Nothing      -> []
+  in
+  add_parent tr children name
+  
+-- Builds a DependencyGraph where every cell points to its children
+build_backwards_dependencies formulas []        = Map.empty
+build_backwards_dependencies formulas (name:ls) = 
+  let gr       = build_backwards_dependencies formulas ls in
+  let children = case Map.lookup name formulas of
+                      Just formula -> get_children formula
+                      Nothing      -> []
+  in
+  add_children gr children name
+   
   
 get_children (Cell name)     = [name]
 get_children (BinOp _ f1 f2) = get_children f1 ++ get_children f2
 
-add_parent gr [] _ = gr
-add_parent gr (child:ls) parent  = 
-  let gr'    = add_parent gr ls parent in
-  let newval = if member child gr' then parent:(gr' ! child) else [parent] in
-  insert child newval gr'
+add_parent tr []         _       = tr
+add_parent tr (child:ls) parent  = 
+  let tr'    = add_parent tr ls parent in
+  insert child parent tr'
   
---     finalize should include a check that the dependency graph is
---     either acyclic or a tree
-finalize formulas = Just $ Spreadsheet formulas empty (build_dependencies formulas (keys formulas))
+add_children gr [] _ = gr
+add_children gr (child:ls) parent =
+  let gr' = add_children gr ls parent in
+  case Map.lookup parent gr' of
+       Just siblings -> insert parent (child:siblings) gr'
+       Nothing       -> insert parent [child]          gr'
+       
+  
+  
+--     finalize should include a check that the dependency graph is acyclic
+finalize formulas = 
+  let tree = build_dependencies formulas (keys formulas) in
+  Just $ Spreadsheet formulas Map.empty tree
 
 -- 3 -- edit values in the spreadsheet to populate the spreadsheet
 step :: Spreadsheet -> CellName -> Value -> Spreadsheet
 step sheet name val = 
+  let f = formulas sheet in
+  let v = values sheet in
+  let t = dependencies sheet in
   -- add value to the spreadsheet's values
-  let new_sheet = updateValue name val sheet in
-  -- step down then step up
-  step_up (step_down new_sheet name) name
-
---- step_up: look at the dependencies of the node's parents
-step_up :: Spreadsheet -> CellName -> Spreadsheet
-step_up sheet name = 
-  let parents = if member name (dependencies sheet) then (dependencies sheet) ! name else [] in
-  -- for parent in parents, calculate the cell parent whose formula is given by (formulas ! parent)
-  let new_values = calculate_cells (formulas sheet) (values sheet) parents in
-  updateValues new_values sheet
+  let v' = insert name val v in
+  -- push down then push up
+  updateValues (push_up f (push_down f v' [name]) t name) sheet
   
---- calculate_cells: recalculate the cells given by the list
-calculate_cells :: SpreadsheetFormulas -> SpreadsheetValues -> [CellName] -> SpreadsheetValues
-calculate_cells _ values [] = values
-calculate_cells formulas values (name:names) = 
-  let values' = calculate_cells formulas values names in
-  let formula = formulas ! name in
-  let value = cell_get formula values' in
-  insert name value values'
+-- should add a check: if the operation doesn't do anything, do not recurse up (or down)
+push_up :: SpreadsheetFormulas -> SpreadsheetValues -> DependencyTree -> CellName -> SpreadsheetValues
+push_up f v t name =
+  case Map.lookup name t of
+    Just parent -> case Map.lookup parent f of
+        Just formula -> case cell_get formula v of
+            Just value -> 
+              let v' = insert parent value v in
+              push_up f v' t parent
+            Nothing    -> --If we can't calculate the value of a cell, clear it and push that upwards
+              let v' = delete parent v in
+              push_up f v' t parent
+        Nothing      -> error ("Parent must have a formula for it to have a child in the dependency tree")
+    Nothing     -> v
+  
+--Update the values of your children
+push_down :: SpreadsheetFormulas -> SpreadsheetValues -> [CellName] -> SpreadsheetValues
+push_down f v [] = v
+push_down f v (name:siblings) = 
+  let v' = case (Map.lookup name v, Map.lookup name f) of
+        (Just value, Just formula) -> 
+          let v'' = cell_put formula value v in
+          let children = get_children formula in
+          push_down f v'' children 
+        (_         , _           ) -> v
+      in
+   push_down f v' siblings
    
---- step_down : look at the children of a node
-step_down :: Spreadsheet -> CellName -> Spreadsheet
-step_down sheet name = 
-  let val = (values sheet) ! name in
-  let formula = (formulas sheet) ! name in
-  let new_values = cell_put formula val (values sheet) in
-  updateValues new_values sheet
 
 
 main = do
