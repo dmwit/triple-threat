@@ -7,6 +7,8 @@ import qualified Data.Map as Map
 import Data.Tree
 import System.Environment
 import Text.Parsec hiding (many, optional, (<|>))
+import Data.Set
+import qualified Data.Set as Set
 
 
 type CellName = String
@@ -36,7 +38,7 @@ data Spreadsheet = Spreadsheet
 updateValues :: SpreadsheetValues -> Spreadsheet -> Spreadsheet
 updateValues new_values sheet = Spreadsheet (formulas sheet) new_values (dependencies sheet)
 updateValue :: CellName -> Value -> Spreadsheet -> Spreadsheet
-updateValue name val sheet = updateValues (insert name val (values sheet)) sheet
+updateValue name val sheet = updateValues (Map.insert name val (values sheet)) sheet
 
 
 -----------------------------------------------------------------
@@ -95,7 +97,7 @@ instance Parseable Equation where
 
 instance Parseable SpreadsheetFormulas where
   parser = munge <$> many (optional parser <* string "\n") where
-    munge xs = fromList [(n,f) | Just (Equation n f) <- xs]
+    munge xs = Map.fromList [(n,f) | Just (Equation n f) <- xs]
 
 
 
@@ -110,7 +112,7 @@ cell_get (Cell new_name) values = Map.lookup new_name values
 cell_get (BinOp o f1 f2) values = liftA2 (op o) (cell_get f1 values) (cell_get f2 values)
 
 cell_put :: Formula -> Value -> SpreadsheetValues -> SpreadsheetValues
-cell_put (Cell target)       val values = insert target val values
+cell_put (Cell target)       val values = Map.insert target val values
 cell_put (BinOp Plus f1 f2)  val values =
   let v1_old = cell_get f1 values in
   let v2_old = cell_get f2 values in
@@ -146,27 +148,29 @@ cell_put (BinOp Minus f1 f2) val values =
 
 -- 1 -- add all formulas
 addFormula :: SpreadsheetFormulas -> CellName -> Formula -> SpreadsheetFormulas
-addFormula formulas name formula = insert name formula formulas
+addFormula formulas name formula = Map.insert name formula formulas
 
 -- 2 -- build a dependency graph from the formulas given, and check
 --      that the graph forms a tree
 finalize :: SpreadsheetFormulas -> Maybe Spreadsheet
-build_dependencies :: SpreadsheetFormulas -> [CellName] -> DependencyTree
+build_dependencies :: SpreadsheetFormulas -> [CellName] -> Maybe DependencyTree
 build_backwards_dependencies :: SpreadsheetFormulas -> [CellName] -> DependencyGraph
 get_children :: Formula -> [CellName]
-add_parent :: DependencyTree -> [CellName] -> CellName -> DependencyTree
+add_parent :: DependencyTree -> [CellName] -> CellName -> Maybe DependencyTree
 add_children :: DependencyGraph -> [CellName] -> CellName -> DependencyGraph
 
 -- Builds a DependencyTree where every cell points to its parent,
 -- a node whose formula points to it.
-build_dependencies formulas []        = Map.empty
+build_dependencies formulas []        = Just Map.empty
 build_dependencies formulas (name:ls) =
-  let tr       = build_dependencies formulas ls in
-  let children = case Map.lookup name formulas of
-                      Just formula -> get_children formula
-                      Nothing      -> []
-  in
-  add_parent tr children name
+  case build_dependencies formulas ls of
+    Just tr -> 
+      let children = case Map.lookup name formulas of
+            Just formula -> get_children formula
+            Nothing      -> []
+      in
+       add_parent tr children name
+    Nothing -> Nothing
 
 -- Builds a DependencyGraph where every cell points to its children
 build_backwards_dependencies formulas []        = Map.empty
@@ -182,21 +186,54 @@ build_backwards_dependencies formulas (name:ls) =
 get_children (Cell name)     = [name]
 get_children (BinOp _ f1 f2) = get_children f1 ++ get_children f2
 
-add_parent tr []         _       = tr
+add_parent tr []         _       = Just tr
 add_parent tr (child:ls) parent  =
-  let tr'    = add_parent tr ls parent in
-  insert child parent tr'
+  case add_parent tr ls parent of
+    Just tr' ->
+      if Map.member child tr' then
+         Nothing --not a tree
+      else
+         Just $ Map.insert child parent tr'
+    Nothing  -> Nothing
 
 -- TODO: is first clause needed? just kept it because that's how old function behaved
 add_children gr [] parent = gr
 add_children gr ls parent = Map.insertWith (++) parent ls gr
 
 
+has_root :: DependencyTree -> CellName -> Set CellName -> Maybe (Set CellName)
+has_root tree name seen =
+  -- if name has been seen already then we followed a loop
+  if Set.member name seen then Nothing else
+    let seen_with_name = Set.insert name seen in
+    case Map.lookup name tree of
+      Just parent -> 
+        case has_root tree parent seen_with_name of
+          Just seen' -> Just (Set.union seen_with_name seen')
+          Nothing    -> Nothing --has no root
+      Nothing     -> Just seen_with_name --has no parent, so name is a root
+      
+check_forest :: DependencyTree -> [CellName] -> Set CellName -> Bool
+check_forest tree [] _              = True
+check_forest tree (name:names) seen = 
+  if Set.member name seen then 
+    check_forest tree names seen
+  else
+    case has_root tree name Set.empty of
+      Just seen' -> check_forest tree names (Set.union seen seen')
+      Nothing    -> False
+    
+      
 
 --     finalize should include a check that the dependency graph is acyclic
 finalize formulas =
-  let tree = build_dependencies formulas (keys formulas) in
-  Just $ Spreadsheet formulas Map.empty tree
+  case build_dependencies formulas (keys formulas) of
+    Just tree ->
+      if check_forest tree (keys tree) Set.empty then
+         Just $ Spreadsheet formulas Map.empty tree
+      else 
+        Nothing
+    Nothing   -> Nothing
 
 -- 3 -- edit values in the spreadsheet to populate the spreadsheet
 step :: Spreadsheet -> CellName -> Value -> Spreadsheet
@@ -205,7 +242,7 @@ step sheet name val =
   let v = values sheet in
   let t = dependencies sheet in
   -- add value to the spreadsheet's values
-  let v' = insert name val v in
+  let v' = Map.insert name val v in
   -- push down then push up
   updateValues (push_up f (push_down f v' [name]) t name) sheet
 
@@ -216,10 +253,10 @@ push_up f v t name =
     Just parent -> case Map.lookup parent f of
         Just formula -> case cell_get formula v of
             Just value ->
-              let v' = insert parent value v in
+              let v' = Map.insert parent value v in
               push_up f v' t parent
             Nothing    -> --If we can't calculate the value of a cell, clear it and push that upwards
-              let v' = delete parent v in
+              let v' = Map.delete parent v in
               push_up f v' t parent
         Nothing      -> error ("Parent must have a formula for it to have a child in the dependency tree")
     Nothing     -> v
