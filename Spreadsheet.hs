@@ -2,6 +2,7 @@
 module Spreadsheet where
 
 import Control.Applicative
+import Control.Monad
 import Data.Map
 import qualified Data.Map as Map
 import Data.Tree
@@ -102,6 +103,61 @@ instance Parseable SpreadsheetFormulas where
 
 
 -----------------------------------------------------------------
+----------- Another approach to summarizing equations -----------
+
+type Weight = Double
+data Polynomial = Polynomial
+  { constant  :: Weight
+  , monomials :: Map CellName Weight
+  } deriving (Eq, Ord, Show, Read)
+
+monomial c w = Polynomial 0 (Map.singleton c w)
+
+fromFormula (Cell n) = Polynomial 0 (Map.singleton n 1)
+fromFormula (BinOp o f1 f2) = op o (fromFormula f1) (fromFormula f2)
+
+instance Num Polynomial where
+  fromInteger n = Polynomial (fromInteger n) Map.empty
+  Polynomial c ms + Polynomial c' ms' = Polynomial (c+c') (Map.unionWith (+) ms ms')
+  Polynomial c ms - Polynomial c' ms' = Polynomial (c-c') (Map.unionWith (-) ms ms')
+  negate (Polynomial c ms) = Polynomial (negate c) (negate <$> ms)
+
+  (*)    = error "multiplication is not well-defined for this simple class of polynomials"
+  abs    = error "absolute value is not well-defined for polynomials"
+  signum = error "signum is not well-defined for polynomials"
+
+v .* Polynomial c ms = Polynomial (v * c) ((v*) <$> ms)
+v .+ Polynomial c ms = Polynomial (v + c) ms
+
+subst :: Map CellName Polynomial -> Polynomial -> Polynomial
+subst ps (Polynomial c ms) = sum $ Polynomial c Map.empty :
+  [ maybe (monomial cell weight) (weight .*) (Map.lookup cell ps)
+  | (cell, weight) <- Map.assocs ms
+  ]
+
+type Summary = Map CellName Polynomial
+data Spreadsheet' = Spreadsheet'
+  { values'       :: SpreadsheetValues
+  , formulas'     :: SpreadsheetFormulas
+  , summary'      :: Summary
+  , dependencies' :: Map CellName (Set CellName) -- if (k, vs) is in this map, when cell k changes, all the cells in vs should change by running the appropriate "get" function
+  } deriving (Eq, Ord, Show, Read)
+
+finalize' :: SpreadsheetFormulas -> Spreadsheet'
+finalize' formulas = Spreadsheet' values_ formulas_ summary_ dependencies_ where
+  values_       = constant <$> summary_
+  formulas_     = formulas
+  summary_      = eqFix (subst polynomials <$>) polynomials
+  dependencies_ = Map.fromListWith Set.union $ do
+    (target, Polynomial _ ms) <- Map.assocs summary_
+    (source, _) <- Map.assocs ms
+    return (source, Set.singleton target)
+
+  polynomials = fromFormula <$> formulas
+
+eqFix f x = let x' = f x in if x == x' then x else eqFix f x'
+
+-----------------------------------------------------------------
 ------------------- Lenses on cells -----------------------------
 
 op Plus  = (+)
@@ -161,16 +217,9 @@ add_children :: DependencyGraph -> [CellName] -> CellName -> DependencyGraph
 
 -- Builds a DependencyTree where every cell points to its parent,
 -- a node whose formula points to it.
-build_dependencies formulas []        = Just Map.empty
-build_dependencies formulas (name:ls) =
-  case build_dependencies formulas ls of
-    Just tr -> 
-      let children = case Map.lookup name formulas of
-            Just formula -> get_children formula
-            Nothing      -> []
-      in
-       add_parent tr children name
-    Nothing -> Nothing
+build_dependencies formulas names = foldM f Map.empty names where
+  children_of name = maybe [] get_children (Map.lookup name formulas)
+  f tr name = add_parent tr (children_of name) name
 
 -- Builds a DependencyGraph where every cell points to its children
 build_backwards_dependencies formulas []        = Map.empty
@@ -186,15 +235,10 @@ build_backwards_dependencies formulas (name:ls) =
 get_children (Cell name)     = [name]
 get_children (BinOp _ f1 f2) = get_children f1 ++ get_children f2
 
-add_parent tr []         _       = Just tr
-add_parent tr (child:ls) parent  =
-  case add_parent tr ls parent of
-    Just tr' ->
-      if Map.member child tr' then
-         Nothing --not a tree
-      else
-         Just $ Map.insert child parent tr'
-    Nothing  -> Nothing
+add_parent tr children parent = foldM f tr children where
+  f tr child = do
+    guard $ not (Map.member child tr)
+    return (Map.insert child parent tr)
 
 add_children gr ls parent = Map.insertWith (++) parent ls gr
 
@@ -205,23 +249,23 @@ has_root tree name seen =
   if Set.member name seen then Nothing else
     let seen_with_name = Set.insert name seen in
     case Map.lookup name tree of
-      Just parent -> 
+      Just parent ->
         case has_root tree parent seen_with_name of
           Just seen' -> Just (Set.union seen_with_name seen')
           Nothing    -> Nothing --has no root
       Nothing     -> Just seen_with_name --has no parent, so name is a root
-      
+
 check_forest :: DependencyTree -> [CellName] -> Set CellName -> Bool
 check_forest tree [] _              = True
-check_forest tree (name:names) seen = 
-  if Set.member name seen then 
+check_forest tree (name:names) seen =
+  if Set.member name seen then
     check_forest tree names seen
   else
     case has_root tree name Set.empty of
       Just seen' -> check_forest tree names (Set.union seen seen')
       Nothing    -> False
-    
-      
+
+
 
 --     finalize should include a check that the dependency graph is acyclic
 finalize formulas =
@@ -229,7 +273,7 @@ finalize formulas =
     Just tree ->
       if check_forest tree (keys tree) Set.empty then
          Just $ Spreadsheet formulas Map.empty tree
-      else 
+      else
         Nothing
     Nothing   -> Nothing
 
