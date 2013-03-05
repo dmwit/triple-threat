@@ -2,6 +2,7 @@
 module Spreadsheet where
 
 import Control.Applicative
+import Control.Monad
 import Data.Map
 import qualified Data.Map as Map
 import Data.Tree
@@ -161,16 +162,9 @@ add_children :: DependencyGraph -> [CellName] -> CellName -> DependencyGraph
 
 -- Builds a DependencyTree where every cell points to its parent,
 -- a node whose formula points to it.
-build_dependencies formulas []        = Just Map.empty
-build_dependencies formulas (name:ls) =
-  case build_dependencies formulas ls of
-    Just tr -> 
-      let children = case Map.lookup name formulas of
-            Just formula -> get_children formula
-            Nothing      -> []
-      in
-       add_parent tr children name
-    Nothing -> Nothing
+build_dependencies formulas names = foldM f Map.empty names where
+  children_of name = maybe [] get_children (Map.lookup name formulas)
+  f tr name = add_parent tr (children_of name) name
 
 -- Builds a DependencyGraph where every cell points to its children
 build_backwards_dependencies formulas []        = Map.empty
@@ -186,15 +180,10 @@ build_backwards_dependencies formulas (name:ls) =
 get_children (Cell name)     = [name]
 get_children (BinOp _ f1 f2) = get_children f1 ++ get_children f2
 
-add_parent tr []         _       = Just tr
-add_parent tr (child:ls) parent  =
-  case add_parent tr ls parent of
-    Just tr' ->
-      if Map.member child tr' then
-         Nothing --not a tree
-      else
-         Just $ Map.insert child parent tr'
-    Nothing  -> Nothing
+add_parent tr children parent = foldM f tr children where
+  f tr child = do
+    guard $ not (Map.member child tr)
+    return (Map.insert child parent tr)
 
 -- TODO: is first clause needed? just kept it because that's how old function behaved
 add_children gr [] parent = gr
