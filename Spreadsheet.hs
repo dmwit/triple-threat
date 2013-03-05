@@ -103,6 +103,61 @@ instance Parseable SpreadsheetFormulas where
 
 
 -----------------------------------------------------------------
+----------- Another approach to summarizing equations -----------
+
+type Weight = Double
+data Polynomial = Polynomial
+  { constant  :: Weight
+  , monomials :: Map CellName Weight
+  } deriving (Eq, Ord, Show, Read)
+
+monomial c w = Polynomial 0 (Map.singleton c w)
+
+fromFormula (Cell n) = Polynomial 0 (Map.singleton n 1)
+fromFormula (BinOp o f1 f2) = op o (fromFormula f1) (fromFormula f2)
+
+instance Num Polynomial where
+  fromInteger n = Polynomial (fromInteger n) Map.empty
+  Polynomial c ms + Polynomial c' ms' = Polynomial (c+c') (Map.unionWith (+) ms ms')
+  Polynomial c ms - Polynomial c' ms' = Polynomial (c-c') (Map.unionWith (-) ms ms')
+  negate (Polynomial c ms) = Polynomial (negate c) (negate <$> ms)
+
+  (*)    = error "multiplication is not well-defined for this simple class of polynomials"
+  abs    = error "absolute value is not well-defined for polynomials"
+  signum = error "signum is not well-defined for polynomials"
+
+v .* Polynomial c ms = Polynomial (v * c) ((v*) <$> ms)
+v .+ Polynomial c ms = Polynomial (v + c) ms
+
+subst :: Map CellName Polynomial -> Polynomial -> Polynomial
+subst ps (Polynomial c ms) = sum $ Polynomial c Map.empty :
+  [ maybe (monomial cell weight) (weight .*) (Map.lookup cell ps)
+  | (cell, weight) <- Map.assocs ms
+  ]
+
+type Summary = Map CellName Polynomial
+data Spreadsheet' = Spreadsheet'
+  { values'       :: SpreadsheetValues
+  , formulas'     :: SpreadsheetFormulas
+  , summary'      :: Summary
+  , dependencies' :: Map CellName (Set CellName) -- if (k, vs) is in this map, when cell k changes, all the cells in vs should change by running the appropriate "get" function
+  } deriving (Eq, Ord, Show, Read)
+
+finalize' :: SpreadsheetFormulas -> Spreadsheet'
+finalize' formulas = Spreadsheet' values_ formulas_ summary_ dependencies_ where
+  values_       = constant <$> summary_
+  formulas_     = formulas
+  summary_      = eqFix (subst polynomials <$>) polynomials
+  dependencies_ = Map.fromListWith Set.union $ do
+    (target, Polynomial _ ms) <- Map.assocs summary_
+    (source, _) <- Map.assocs ms
+    return (source, Set.singleton target)
+
+  polynomials = fromFormula <$> formulas
+
+eqFix f x = let x' = f x in if x == x' then x else eqFix f x'
+
+-----------------------------------------------------------------
 ------------------- Lenses on cells -----------------------------
 
 op Plus  = (+)
