@@ -55,6 +55,9 @@ Constraint Programming and Spreadsheets
 * A Declarative Programming Environment Based on Constraints
   - another take, but as a paper it is fairly content-free; hardly more than "we wrote a piece of software" without even saying very much about what the software does, let alone how it does it
 * HotDoc: A Flexible Framework for Spatial Composition: http://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=626563
+* A New Basis for Spreadsheet Computing: http://www.aaai.org/ojs/index.php/aimagazine/article/view/1533
+  - two focuses: (1) representing non-exact numeric values (ranges, distributions) and (2) constraint propogation to fill in any cell determined by the other cells in the equation.
+  - fully integrated with Excel, might be a good model of such integration
 
 Multi-way Constraints and Spreadsheets
 ---------------------------------------

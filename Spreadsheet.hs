@@ -196,8 +196,6 @@ add_parent tr (child:ls) parent  =
          Just $ Map.insert child parent tr'
     Nothing  -> Nothing
 
--- TODO: is first clause needed? just kept it because that's how old function behaved
-add_children gr [] parent = gr
 add_children gr ls parent = Map.insertWith (++) parent ls gr
 
 
