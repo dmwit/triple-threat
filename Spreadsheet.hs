@@ -196,23 +196,23 @@ has_root tree name seen =
   if Set.member name seen then Nothing else
     let seen_with_name = Set.insert name seen in
     case Map.lookup name tree of
-      Just parent -> 
+      Just parent ->
         case has_root tree parent seen_with_name of
           Just seen' -> Just (Set.union seen_with_name seen')
           Nothing    -> Nothing --has no root
       Nothing     -> Just seen_with_name --has no parent, so name is a root
-      
+
 check_forest :: DependencyTree -> [CellName] -> Set CellName -> Bool
 check_forest tree [] _              = True
-check_forest tree (name:names) seen = 
-  if Set.member name seen then 
+check_forest tree (name:names) seen =
+  if Set.member name seen then
     check_forest tree names seen
   else
     case has_root tree name Set.empty of
       Just seen' -> check_forest tree names (Set.union seen seen')
       Nothing    -> False
-    
-      
+
+
 
 --     finalize should include a check that the dependency graph is acyclic
 finalize formulas =
@@ -220,7 +220,7 @@ finalize formulas =
     Just tree ->
       if check_forest tree (keys tree) Set.empty then
          Just $ Spreadsheet formulas Map.empty tree
-      else 
+      else
         Nothing
     Nothing   -> Nothing
 
