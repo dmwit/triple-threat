@@ -129,6 +129,7 @@ instance Num Polynomial where
 v .* Polynomial c ms = Polynomial (v * c) ((v*) <$> ms)
 v .+ Polynomial c ms = Polynomial (v + c) ms
 
+-- variable substitution for polynomials
 subst :: Map CellName Polynomial -> Polynomial -> Polynomial
 subst ps (Polynomial c ms) = c .+ sum
   [ maybe (monomial cell weight) (weight .*) (Map.lookup cell ps)
@@ -155,6 +156,7 @@ finalize' formulas = Spreadsheet' values_ formulas_ summary_ dependencies_ where
 
   polynomials = fromFormula <$> formulas
 
+-- find the fixpoint of a function by iterating it and crossing our fingers
 eqFix f x = let x' = f x in if x == x' then x else eqFix f x'
 
 -----------------------------------------------------------------
