@@ -130,7 +130,7 @@ v .* Polynomial c ms = Polynomial (v * c) ((v*) <$> ms)
 v .+ Polynomial c ms = Polynomial (v + c) ms
 
 subst :: Map CellName Polynomial -> Polynomial -> Polynomial
-subst ps (Polynomial c ms) = sum $ Polynomial c Map.empty :
+subst ps (Polynomial c ms) = c .+ sum
   [ maybe (monomial cell weight) (weight .*) (Map.lookup cell ps)
   | (cell, weight) <- Map.assocs ms
   ]
@@ -147,7 +147,7 @@ finalize' :: SpreadsheetFormulas -> Spreadsheet'
 finalize' formulas = Spreadsheet' values_ formulas_ summary_ dependencies_ where
   values_       = constant <$> summary_
   formulas_     = formulas
-  summary_      = eqFix (subst polynomials <$>) polynomials
+  summary_      = eqFix (\m -> subst m <$> m) polynomials
   dependencies_ = Map.fromListWith Set.union $ do
     (target, Polynomial _ ms) <- Map.assocs summary_
     (source, _) <- Map.assocs ms
