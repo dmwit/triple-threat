@@ -207,14 +207,14 @@ polyPut p@(Polynomial c ms) new v
 -- for all the cells that reference those roots; this is unsafe because we
 -- don't check that the only values being set this way are actually roots
 unsafeSetRoots :: Map CellName Value -> Spreadsheet' -> Spreadsheet'
-unsafeSetRoots newRoots spreadsheet = spreadsheet { values' = newValues } where
-  newValues = gets `Map.union` newRoots `Map.union` values' spreadsheet
+unsafeSetRoots newRoots sheet = sheet { values' = newValues } where
+  newValues = gets `Map.union` newRoots `Map.union` values' sheet
   nonRoots = Set.unions
-    [ Map.findWithDefault Set.empty n (dependencies' spreadsheet)
+    [ Map.findWithDefault Set.empty n (dependencies' sheet)
     | n <- Map.keys newRoots
     ]
   gets = Map.fromList
-    [ (n, polyGet (summary' spreadsheet Map.! n) newRoots)
+    [ (n, polyGet (summary' sheet Map.! n) newRoots)
     | n <- Set.toList nonRoots
     ]
 
@@ -222,9 +222,9 @@ unsafeSetRoots newRoots spreadsheet = spreadsheet { values' = newValues } where
 -- update all the roots that cell depends on, and then run all the gets
 -- necessary to make the whole spreadsheet consistent
 setValue :: CellName -> Value -> Spreadsheet' -> Spreadsheet'
-setValue name value spreadsheet = unsafeSetRoots newRoots spreadsheet where
-  polynomial = Map.findWithDefault (monomial name 1) name (summary' spreadsheet)
-  newRoots   = polyPut polynomial value (values' spreadsheet)
+setValue name value sheet = unsafeSetRoots newRoots sheet where
+  polynomial = Map.findWithDefault (monomial name 1) name (summary' sheet)
+  newRoots   = polyPut polynomial value (values' sheet)
 
 -----------------------------------------------------------------
 ------------------- Lenses on cells -----------------------------
