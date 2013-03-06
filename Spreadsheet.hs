@@ -208,13 +208,14 @@ polyPut p@(Polynomial c ms) new v
 -- don't check that the only values being set this way are actually roots
 unsafeSetRoots :: Map CellName Value -> Spreadsheet' -> Spreadsheet'
 unsafeSetRoots newRoots sheet = sheet { values' = newValues } where
-  newValues = gets `Map.union` newRoots `Map.union` values' sheet
-  nonRoots = Set.unions
+  allRoots  = newRoots `Map.union` values' sheet
+  newValues = gets `Map.union` allRoots
+  nonRoots  = Set.unions
     [ Map.findWithDefault Set.empty n (dependencies' sheet)
     | n <- Map.keys newRoots
     ]
   gets = Map.fromList
-    [ (n, polyGet (summary' sheet Map.! n) newRoots)
+    [ (n, polyGet (summary' sheet Map.! n) allRoots)
     | n <- Set.toList nonRoots
     ]
 
