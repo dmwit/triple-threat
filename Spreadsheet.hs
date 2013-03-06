@@ -172,7 +172,7 @@ data Spreadsheet' = Spreadsheet'
 -- polynomials that refer directly to base cells
 finalize' :: SpreadsheetFormulas -> Spreadsheet'
 finalize' formulas = Spreadsheet' values_ formulas_ summary_ dependencies_ where
-  values_       = constant <$> summary_
+  values_       = Map.empty
   formulas_     = formulas
   summary_      = eqFix (\m -> subst m <$> m) polynomials
   dependencies_ = Map.fromListWith Set.union $ do
