@@ -23,11 +23,12 @@ type DependencyTree      = Map CellName CellName
 data Formula
   = Cell CellName
   | BinOp Op Formula Formula
+  | Val Value
   deriving (Eq, Ord, Show, Read)
 
 data Equation = Equation CellName Formula deriving (Eq, Ord, Show, Read)
 
-data Op = Plus | Minus deriving (Eq, Ord, Show, Read)
+data Op = Plus | Minus | Times | Div deriving (Eq, Ord, Show, Read)
 
 
 data Spreadsheet = Spreadsheet
@@ -58,10 +59,13 @@ instance PPrint Value where pprint = show
 instance PPrint Formula where
   pprint (Cell s) = "<" ++ s ++ ">"
   pprint (BinOp op f1 f2) = "(" ++ pprint f1 ++ pprint op ++ pprint f2 ++ ")"
+  pprint (Val v) = "#" ++ show v ++ "#"
 
 instance PPrint Op where
   pprint Plus  = "+"
   pprint Minus = "-"
+  pprint Times = "*"
+  pprint Div   = "/"
 
 instance PPrint DependencyGraph where
   pprint m = unlines [cellName ++ " = " ++ pprint namesList | (cellName, namesList) <- assocs m]
@@ -81,9 +85,12 @@ instance PPrint Spreadsheet where
 ---------------------------- Parser -----------------------------
 
 parseCellName = many1 (noneOf " >")
+parseConst    = many1 (noneOf "#")
 
 class    Parseable a       where parser :: Stream s m Char => ParsecT s u m a
-instance Parseable Op      where parser = (string "+" >> return Plus) <|> (string "-" >> return Minus)
+instance Parseable Op      where 
+  parser = (string "+" >> return Plus)  <|> (string "-" >> return Minus) <|> 
+           (string "*" >> return Times) <|> (string "/" >> return Div)
 instance Parseable Formula where
   parser = chainl1 (parens <|> cell) (BinOp <$> parser) where
     cell   = string "<" *> (Cell <$> parseCellName) <* string ">"
@@ -114,7 +121,7 @@ data Polynomial = Polynomial
 monomial c w = Polynomial 0 (Map.singleton c w)
 
 fromFormula (Cell n) = Polynomial 0 (Map.singleton n 1)
-fromFormula (BinOp o f1 f2) = op o (fromFormula f1) (fromFormula f2)
+fromFormula (BinOp o f1 f2) = undefined --op o (fromFormula f1) (fromFormula f2)
 
 instance Num Polynomial where
   fromInteger n = Polynomial (fromInteger n) Map.empty
@@ -162,39 +169,46 @@ eqFix f x = let x' = f x in if x == x' then x else eqFix f x'
 
 op Plus  = (+)
 op Minus = (-)
+op Times = (*)
+op Div   = (/)
+
+inv :: Op -> Value -> Value -> Value
+-- inv o v1 v2 = v3 means v1 = (op o) v2 v3
+inv Plus  v1 v2 = (op Minus) v1 v2
+inv Minus v1 v2 = (op Minus) v2 v1
+inv Times v1 v2 = (op Div) v1 v2
+inv Div   v1 v2 = (op Div) v2 v1
+
+get_scale Plus v_old v_new = 
+  if v_old == 0 then v_new / 2 else v_new / v_old
+get_scale Minus v_old v_new =
+  if v_old == 0 then v_new else v_new / v_old
+get_scale Times v_old v_new = 
+  if v_old == 0 then sqrt (abs (v_new)) else sqrt (abs (v_new / v_old))
+get_scale Div v_old v_new =
+  if v_old == 0 then v_new else sqrt (abs (v_new / v_old))
 
 cell_get :: Formula -> SpreadsheetValues -> Maybe Value
 cell_get (Cell new_name) values = Map.lookup new_name values
 cell_get (BinOp o f1 f2) values = liftA2 (op o) (cell_get f1 values) (cell_get f2 values)
+cell_get (Val val)       _      = Just v
 
 cell_put :: Formula -> Value -> SpreadsheetValues -> SpreadsheetValues
 cell_put (Cell target)       val values = Map.insert target val values
-cell_put (BinOp Plus f1 f2)  val values =
+cell_put (BinOp o f1 f2) val values =
   let v1_old = cell_get f1 values in
   let v2_old = cell_get f2 values in
   case (v1_old,v2_old) of
     (Just v1_old,Just v2_old) ->
-      let v1_new = (val * v1_old) / (v1_old + v2_old) in
-      let v2_new = val - v1_new in
+      let v_old = (op o) v1_old v2_old in
+      let scale = get_scale o v_old val in
+      let v1_new = scale * v1_old in
+      let v2_new = inv o val v1_new in
       let values' = cell_put f1 v1_new values in
       cell_put f2 v2_new values'
     (_,_) ->
-      let v1_new = val / 2 in
-      let v2_new = val - v1_new in
-      let values' = cell_put f1 v1_new values in
-      cell_put f2 v2_new values'
-cell_put (BinOp Minus f1 f2) val values =
-  let v1_old = cell_get f1 values in
-  let v2_old = cell_get f2 values in
-  case (v1_old,v2_old) of
-    (Just v1_old,Just v2_old) ->
-      let v1_new = (val * v1_old) / (v1_old - v2_old) in
-      let v2_new = val - v1_new in
-      let values' = cell_put f1 v1_new values in
-      cell_put f2 v2_new values'
-    (_,_) ->
-      let v1_new = val in
-      let v2_new = 0 in
+      let v1_new = get_scale o 0 val in
+      let v2_new = inv o val v1_new in
       let values' = cell_put f1 v1_new values in
       cell_put f2 v2_new values'
 
