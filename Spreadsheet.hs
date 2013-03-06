@@ -112,7 +112,7 @@ data Polynomial = Polynomial
   } deriving (Eq, Ord, Show, Read)
 
 monomial c w = Polynomial 0 (Map.singleton c w)
-
+fromDouble c = Polynomial c Map.empty
 fromFormula (Cell n) = Polynomial 0 (Map.singleton n 1)
 fromFormula (BinOp o f1 f2) = op o (fromFormula f1) (fromFormula f2)
 
@@ -127,7 +127,7 @@ instance Num Polynomial where
   signum = error "signum is not well-defined for polynomials"
 
 v .* Polynomial c ms = Polynomial (v * c) ((v*) <$> ms)
-v .+ Polynomial c ms = Polynomial (v + c) ms
+v .+ p = fromDouble v + p
 
 -- variable substitution for polynomials
 subst :: Map CellName Polynomial -> Polynomial -> Polynomial
@@ -144,6 +144,8 @@ data Spreadsheet' = Spreadsheet'
   , dependencies' :: Map CellName (Set CellName) -- if (k, vs) is in this map, when cell k changes, all the cells in vs should change by running the appropriate "get" function
   } deriving (Eq, Ord, Show, Read)
 
+-- flatten formulas that reference cells with formulas into them into flat
+-- polynomials that refer directly to base cells
 finalize' :: SpreadsheetFormulas -> Spreadsheet'
 finalize' formulas = Spreadsheet' values_ formulas_ summary_ dependencies_ where
   values_       = constant <$> summary_
@@ -158,6 +160,37 @@ finalize' formulas = Spreadsheet' values_ formulas_ summary_ dependencies_ where
 
 -- find the fixpoint of a function by iterating it and crossing our fingers
 eqFix f x = let x' = f x in if x == x' then x else eqFix f x'
+
+-- not using SpreadsheetValues here when we expect to return a
+-- differently-shaped map (i.e. one defined on a different domain of CellNames)
+polyGet :: Polynomial -> SpreadsheetValues -> Value
+polyPut :: Polynomial -> SpreadsheetValues -> Map CellName Value
+polyGet p v = constant (subst (fromDouble <$> v) p)
+polyPut = undefined
+
+-- given some new values for the roots (that is, cells with no associated
+-- formula), update the spreadsheet in the forward direction by running "get"
+-- for all the cells that reference those roots; this is unsafe because we
+-- don't check that the only values being set this way are actually roots
+unsafeSetRoots :: Map CellName Value -> Spreadsheet' -> Spreadsheet'
+unsafeSetRoots newRoots spreadsheet = spreadsheet { values' = newValues } where
+  newValues = values' spreadsheet `Map.union` newRoots `Map.union` gets
+  nonRoots = Set.unions
+    [ Map.findWithDefault Set.empty n (dependencies' spreadsheet)
+    | n <- Map.keys newRoots
+    ]
+  gets = Map.fromList
+    [ (n, polyGet (summary' spreadsheet Map.! n) newRoots)
+    | n <- Set.toList nonRoots
+    ]
+
+-- do a full update: given a new value for a cell, change that cell, run put to
+-- update all the roots that cell depends on, and then run all the gets
+-- necessary to make the whole spreadsheet consistent
+setValue :: CellName -> Value -> Spreadsheet' -> Spreadsheet'
+setValue name value spreadsheet = unsafeSetRoots newRoots spreadsheet where
+  polynomial = Map.findWithDefault (monomial name 1) name (summary' spreadsheet)
+  newRoots   = polyPut polynomial (values' spreadsheet)
 
 -----------------------------------------------------------------
 ------------------- Lenses on cells -----------------------------
