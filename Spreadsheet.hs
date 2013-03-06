@@ -150,6 +150,7 @@ instance Num Polynomial where
   abs    = error "absolute value is not well-defined for polynomials"
   signum = error "signum is not well-defined for polynomials"
 
+-- scalar multiplication and addition
 v .* Polynomial c ms = Polynomial (v * c) ((v*) <$> ms)
 v .+ p = fromDouble v + p
 
