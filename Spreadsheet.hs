@@ -3,10 +3,12 @@ module Spreadsheet where
 
 import Control.Applicative
 import Control.Monad
+import Data.List
 import Data.Map
 import qualified Data.Map as Map
 import Data.Tree
 import System.Environment
+import System.IO
 import Text.Parsec hiding (many, optional, (<|>))
 import Data.Set
 import qualified Data.Set as Set
@@ -76,6 +78,26 @@ instance PPrint [CellName] where
 instance PPrint Spreadsheet where
   pprint sheet = unlines $ ["Formulas", pprint (formulas sheet), "Values", pprint (values sheet)]
 
+instance PPrint Polynomial where
+  pprint (Polynomial c ws) = intercalate "+" $
+    [ show c | c /= 0 ] ++
+    [ show w ++ "*<" ++ n ++ ">"
+    | (n, w) <- Map.assocs ws
+    , w /= 0
+    ]
+
+instance PPrint (Map CellName (Formula, Polynomial)) where
+  pprint m = unlines
+    [ cellName ++ " = " ++ pprint formula ++ " (= " ++ pprint polynomial ++ ")"
+    | (cellName, (formula, polynomial)) <- Map.assocs m
+    ]
+
+instance PPrint Spreadsheet' where
+  pprint sheet
+    = unlines ["Formulas", pprint (Map.intersectionWith (,) (formulas' sheet) (summary' sheet)),
+               "Values", pprint (values' sheet)
+              ]
+
 
 -----------------------------------------------------------------
 ---------------------------- Parser -----------------------------
@@ -99,6 +121,8 @@ instance Parseable Equation where
 instance Parseable SpreadsheetFormulas where
   parser = munge <$> many (optional parser <* string "\n") where
     munge xs = Map.fromList [(n,f) | Just (Equation n f) <- xs]
+
+instance Parseable Spreadsheet' where parser = finalize' <$> parser
 
 
 
@@ -365,6 +389,19 @@ push_down f v (name:siblings) =
 
 
 
+prompt s = do
+  putStr s
+  hFlush stdout
+  getLine
+
+setValueLoop s = do
+  putStr (pprint s)
+  cellName  <- prompt "Change cell: "
+  cellValue <- prompt "Change the value to: "
+  case reads cellValue of
+    [(v,"")] -> setValueLoop (setValue cellName v s)
+    _ -> putStrLn "That doesn't look like a number to me!" >> setValueLoop s
+
 main = do
   a <- getArgs
   case a of
@@ -372,5 +409,5 @@ main = do
       s <- readFile fileName
       case parse parser fileName s of
         Left  err -> print err
-        Right eqs -> putStr . pprint $ (eqs :: SpreadsheetFormulas)
+        Right eqs -> setValueLoop eqs
     _ -> putStrLn "call with one argument naming a file with a bunch of equations, one on each line"
