@@ -163,10 +163,20 @@ eqFix f x = let x' = f x in if x == x' then x else eqFix f x'
 
 -- not using SpreadsheetValues here when we expect to return a
 -- differently-shaped map (i.e. one defined on a different domain of CellNames)
+--
+-- for now, put has one available spreading strategy: split the delta up
+-- according to the magnitude of the weights on the monomials
 polyGet :: Polynomial -> SpreadsheetValues -> Value
-polyPut :: Polynomial -> SpreadsheetValues -> Map CellName Value
+polyPut :: Polynomial -> Value -> SpreadsheetValues -> Map CellName Value
 polyGet p v = constant (subst (fromDouble <$> v) p)
-polyPut = undefined
+polyPut p@(Polynomial c ms) new v
+  | factor == 0 = error "can't update the value of a cell with a constant formula!"
+  | otherwise   = Map.mapWithKey (\n w -> cell n + delta * abs w / factor) ms
+  where
+  old    = polyGet p v
+  delta  = old - new
+  factor = sum (abs <$> Map.elems ms)
+  cell n = Map.findWithDefault 0 n v
 
 -- given some new values for the roots (that is, cells with no associated
 -- formula), update the spreadsheet in the forward direction by running "get"
@@ -190,7 +200,7 @@ unsafeSetRoots newRoots spreadsheet = spreadsheet { values' = newValues } where
 setValue :: CellName -> Value -> Spreadsheet' -> Spreadsheet'
 setValue name value spreadsheet = unsafeSetRoots newRoots spreadsheet where
   polynomial = Map.findWithDefault (monomial name 1) name (summary' spreadsheet)
-  newRoots   = polyPut polynomial (values' spreadsheet)
+  newRoots   = polyPut polynomial value (values' spreadsheet)
 
 -----------------------------------------------------------------
 ------------------- Lenses on cells -----------------------------
