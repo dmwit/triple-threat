@@ -170,12 +170,12 @@ polyGet :: Polynomial -> SpreadsheetValues -> Value
 polyPut :: Polynomial -> Value -> SpreadsheetValues -> Map CellName Value
 polyGet p v = constant (subst (fromDouble <$> v) p)
 polyPut p@(Polynomial c ms) new v
-  | factor == 0 = error "can't update the value of a cell with a constant formula!"
+  | factor == 0 = error "can't update the value of this cell"
   | otherwise   = Map.mapWithKey (\n w -> cell n + delta * abs w / factor) ms
   where
   old    = polyGet p v
-  delta  = old - new
-  factor = sum (abs <$> Map.elems ms)
+  delta  = new - old
+  factor = sum [w * abs w | w <- Map.elems ms]
   cell n = Map.findWithDefault 0 n v
 
 -- given some new values for the roots (that is, cells with no associated
@@ -184,7 +184,7 @@ polyPut p@(Polynomial c ms) new v
 -- don't check that the only values being set this way are actually roots
 unsafeSetRoots :: Map CellName Value -> Spreadsheet' -> Spreadsheet'
 unsafeSetRoots newRoots spreadsheet = spreadsheet { values' = newValues } where
-  newValues = values' spreadsheet `Map.union` newRoots `Map.union` gets
+  newValues = gets `Map.union` newRoots `Map.union` values' spreadsheet
   nonRoots = Set.unions
     [ Map.findWithDefault Set.empty n (dependencies' spreadsheet)
     | n <- Map.keys newRoots
