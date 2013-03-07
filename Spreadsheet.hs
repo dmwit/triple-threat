@@ -25,7 +25,6 @@ type DependencyTree      = Map CellName CellName
 data Formula
   = Cell CellName
   | BinOp Op Formula Formula
-  | Val Value
   deriving (Eq, Ord, Show, Read)
 
 data Equation = Equation CellName Formula deriving (Eq, Ord, Show, Read)
@@ -61,7 +60,6 @@ instance PPrint Value where pprint = show
 instance PPrint Formula where
   pprint (Cell s) = "<" ++ s ++ ">"
   pprint (BinOp op f1 f2) = "(" ++ pprint f1 ++ pprint op ++ pprint f2 ++ ")"
-  pprint (Val v) = "#" ++ show v ++ "#"
 
 instance PPrint Op where
   pprint Plus  = "+"
@@ -243,12 +241,12 @@ op Minus = (-)
 op Times = (*)
 op Div   = (/)
 
-inv :: Op -> Value -> Value -> Value
--- inv o v1 v2 = v3 means v1 = (op o) v2 v3
-inv Plus  v1 v2 = (op Minus) v1 v2
-inv Minus v1 v2 = (op Minus) v2 v1
-inv Times v1 v2 = (op Div) v1 v2
-inv Div   v1 v2 = (op Div) v2 v1
+put3 :: Op -> Value -> Value -> Value
+-- put3 o v1 v2 = v3 means v1 = (op o) v2 v3
+put3 Plus  v1 v2 = (op Minus) v1 v2
+put3 Minus v1 v2 = (op Minus) v2 v1
+put3 Times v1 v2 = (op Div) v1 v2
+put3 Div   v1 v2 = (op Div) v2 v1
 
 get_scale Plus v_old v_new = 
   if v_old == 0 then v_new / 2 else v_new / v_old
@@ -262,7 +260,6 @@ get_scale Div v_old v_new =
 cell_get :: Formula -> SpreadsheetValues -> Maybe Value
 cell_get (Cell new_name) values = Map.lookup new_name values
 cell_get (BinOp o f1 f2) values = liftA2 (op o) (cell_get f1 values) (cell_get f2 values)
-cell_get (Val val)       _      = Just v
 
 cell_put :: Formula -> Value -> SpreadsheetValues -> SpreadsheetValues
 cell_put (Cell target)       val values = Map.insert target val values
@@ -274,12 +271,12 @@ cell_put (BinOp o f1 f2) val values =
       let v_old = (op o) v1_old v2_old in
       let scale = get_scale o v_old val in
       let v1_new = scale * v1_old in
-      let v2_new = inv o val v1_new in
+      let v2_new = put3 o val v1_new in
       let values' = cell_put f1 v1_new values in
       cell_put f2 v2_new values'
     (_,_) ->
       let v1_new = get_scale o 0 val in
-      let v2_new = inv o val v1_new in
+      let v2_new = put3 o val v1_new in
       let values' = cell_put f1 v1_new values in
       cell_put f2 v2_new values'
 
