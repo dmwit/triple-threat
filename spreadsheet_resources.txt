@@ -61,7 +61,7 @@ Constraint Programming and Spreadsheets
 
 Multi-way Constraints and Spreadsheets
 ---------------------------------------
-* Analyzing and debugging hierarchies of multi-way local propagation constraints: http://pdf.aminer.org/000/548/003/analyzing_and_debugging_hierarchies_of_multi_way_local_propagation_constraints.pdf
+* Analyzing and debugging hierarchies of multi-way local propagation constraints: http://pdf.aminer.org/000/548/003/analyzing_and_debugging_hierarchies_of_multi_way_local_propagation_constraints.pdf  - debugging inside of SkyBlue, which uses constraint heiarchies to prioritize constraints
 * Multi-way versus one-way constraints in user interfaces: Experience with the DeltaBlue Algorithm: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.38.2714&rep=rep1&type=pdf
 * Graphical techniques in a spreadsheet for specifying user interfaces: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.18.3001&rep=rep1&type=pdf
   - Use spreadsheets to define constraints, instead of using constraints to define spreadsheets
