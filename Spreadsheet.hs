@@ -1,35 +1,8 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts, NoMonomorphismRestriction #-}
 module Spreadsheet where
 
-import Control.Applicative
-import Control.Monad
-import Data.List
-import Data.Map
+import SpreadsheetCommon
 import qualified Data.Map as Map
-import Data.Tree
-import System.Environment
-import System.IO
-import Text.Parsec hiding (many, optional, (<|>))
-import Data.Set
 import qualified Data.Set as Set
-
-
-type CellName = String
-type Value    = Double
-type SpreadsheetFormulas = Map CellName Formula
-type SpreadsheetValues   = Map CellName Value
-type DependencyGraph     = Map CellName [CellName]
---DependencyTree: Each cell gets mapped to its parent, if it has one
-type DependencyTree      = Map CellName CellName
-
-data Formula
-  = Cell CellName
-  | BinOp Op Formula Formula
-  deriving (Eq, Ord, Show, Read)
-
-data Equation = Equation CellName Formula deriving (Eq, Ord, Show, Read)
-
-data Op = Plus | Minus | Times | Div deriving (Eq, Ord, Show, Read)
 
 
 data Spreadsheet = Spreadsheet
@@ -47,75 +20,12 @@ updateValue name val sheet = updateValues (Map.insert name val (values sheet)) s
 -----------------------------------------------------------------
 ------------------- Pretty Printer ------------------------------
 
-class PPrint a where pprint :: a -> String
-
-instance PPrint SpreadsheetFormulas where
-  pprint m = unlines [cellName ++ " = " ++ pprint formula | (cellName, formula) <- assocs m]
-
-instance PPrint SpreadsheetValues where
-  pprint m = unlines [cellName ++ " = " ++ pprint value   | (cellName, value  ) <- assocs m]
-
-instance PPrint Value where pprint = show
-
-instance PPrint Formula where
-  pprint (Cell s) = "<" ++ s ++ ">"
-  pprint (BinOp op f1 f2) = "(" ++ pprint f1 ++ pprint op ++ pprint f2 ++ ")"
-
-instance PPrint Op where
-  pprint Plus  = "+"
-  pprint Minus = "-"
-  pprint Times = "*"
-  pprint Div   = "/"
-
-instance PPrint DependencyGraph where
-  pprint m = unlines [cellName ++ " = " ++ pprint namesList | (cellName, namesList) <- assocs m]
-
-instance PPrint DependencyTree where
-  pprint m = unlines [cellName ++ " = " ++ name | (cellName, name) <- assocs m]
-
-instance PPrint [CellName] where
-  pprint []            = ""
-  pprint (cellName:ls) = cellName ++ ", " ++ pprint ls
-
 instance PPrint Spreadsheet where
   pprint sheet = unlines $ ["Formulas", pprint (formulas sheet), "Values", pprint (values sheet)]
 
 
-
------------------------------------------------------------------
----------------------------- Parser -----------------------------
-
-parseCellName = many1 (noneOf " >")
-parseConst    = many1 (noneOf "#")
-
-class    Parseable a       where parser :: Stream s m Char => ParsecT s u m a
-instance Parseable Op      where 
-  parser = (string "+" >> return Plus)  <|> (string "-" >> return Minus) <|> 
-           (string "*" >> return Times) <|> (string "/" >> return Div)
-instance Parseable Formula where
-  parser = chainl1 (parens <|> cell) (BinOp <$> parser) where
-    cell   = string "<" *> (Cell <$> parseCellName) <* string ">"
-    parens = string "(" *> parser <* string ")"
-
-instance Parseable Equation where
-  parser = do
-    n <- parseCellName
-    string " = "
-    f <- parser
-    return (Equation n f)
-
-instance Parseable SpreadsheetFormulas where
-  parser = munge <$> many (optional parser <* string "\n") where
-    munge xs = Map.fromList [(n,f) | Just (Equation n f) <- xs]
-
-
 -----------------------------------------------------------------
 ------------------- Lenses on cells -----------------------------
-
-op Plus  = (+)
-op Minus = (-)
-op Times = (*)
-op Div   = (/)
 
 put3 :: Op -> Value -> Value -> Value
 -- put3 o v1 v2 = v3 means v1 = (op o) v2 v3
@@ -227,9 +137,9 @@ check_forest tree (name:names) seen =
 
 --     finalize should include a check that the dependency graph is acyclic
 finalize formulas =
-  case build_dependencies formulas (keys formulas) of
+  case build_dependencies formulas (Map.keys formulas) of
     Just tree ->
-      if check_forest tree (keys tree) Set.empty then
+      if check_forest tree (Map.keys tree) Set.empty then
          Just $ Spreadsheet formulas Map.empty tree
       else
         Nothing

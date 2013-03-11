@@ -1,62 +1,50 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts, NoMonomorphismRestriction #-}
+{-# LANGUAGE FlexibleInstances #-}
 module SpreadsheetPoly where
 
-import Control.Applicative
-import Control.Monad
-import Data.List
-import Data.Map
-import qualified Data.Map as Map
-import Data.Tree
+import SpreadsheetCommon
 import System.Environment
 import System.IO
-import Text.Parsec hiding (many, optional, (<|>))
-import Data.Set
+
+import qualified Data.Map as Map
 import qualified Data.Set as Set
 
+-- polynomials {{{1
 
-type CellName = String
-type Value    = Double
-type SpreadsheetFormulas = Map CellName Formula
-type SpreadsheetValues   = Map CellName Value
-type DependencyGraph     = Map CellName [CellName]
+type Weight = Double
+data Polynomial = Polynomial
+  { constant  :: Weight
+  , monomials :: Map CellName Weight
+  } deriving (Eq, Ord, Show, Read)
 
-data Formula
-  = Cell CellName
-  | BinOp Op Formula Formula
-  deriving (Eq, Ord, Show, Read)
+instance Num Polynomial where
+  fromInteger n = Polynomial (fromInteger n) Map.empty
+  Polynomial c ms + Polynomial c' ms' = Polynomial (c+c') (Map.unionWith (+) ms ms')
+  Polynomial c ms - Polynomial c' ms' = Polynomial (c-c') (Map.unionWith (-) ms ms')
+  negate (Polynomial c ms) = Polynomial (negate c) (negate <$> ms)
 
-data Equation = Equation CellName Formula deriving (Eq, Ord, Show, Read)
+  (*)    = error "multiplication is not well-defined for this simple class of polynomials"
+  abs    = error "absolute value is not well-defined for polynomials"
+  signum = error "signum is not well-defined for polynomials"
 
-data Op = Plus | Minus deriving (Eq, Ord, Show, Read)
+-- TODO: handle this more gracefully
+smallOp Plus  = (+)
+smallOp Minus = (-)
 
+monomial c w = Polynomial 0 (Map.singleton c w)
+fromDouble c = Polynomial c Map.empty
+fromFormula (Cell n) = Polynomial 0 (Map.singleton n 1)
+fromFormula (BinOp o f1 f2) = smallOp o (fromFormula f1) (fromFormula f2)
 
------------------------------------------------------------------
-------------------- Pretty Printer ------------------------------
+-- scalar multiplication and addition
+v .* Polynomial c ms = Polynomial (v * c) ((v*) <$> ms)
+v .+ p = fromDouble v + p
 
-class PPrint a where pprint :: a -> String
-
-instance PPrint SpreadsheetFormulas where
-  pprint m = unlines [cellName ++ " = " ++ pprint formula | (cellName, formula) <- assocs m]
-
-instance PPrint SpreadsheetValues where
-  pprint m = unlines [cellName ++ " = " ++ pprint value   | (cellName, value  ) <- assocs m]
-
-instance PPrint Value where pprint = show
-
-instance PPrint Formula where
-  pprint (Cell s) = "<" ++ s ++ ">"
-  pprint (BinOp op f1 f2) = "(" ++ pprint f1 ++ pprint op ++ pprint f2 ++ ")"
-
-instance PPrint Op where
-  pprint Plus  = "+"
-  pprint Minus = "-"
-  
-instance PPrint [CellName] where
-  pprint []            = ""
-  pprint (cellName:ls) = cellName ++ ", " ++ pprint ls
-
-instance PPrint DependencyGraph where
-  pprint m = unlines [cellName ++ " = " ++ pprint namesList | (cellName, namesList) <- assocs m]
+-- variable substitution for polynomials
+subst :: Map CellName Polynomial -> Polynomial -> Polynomial
+subst ps (Polynomial c ms) = c .+ sum
+  [ maybe (monomial cell weight) (weight .*) (Map.lookup cell ps)
+  | (cell, weight) <- Map.assocs ms
+  ]
 
 instance PPrint Polynomial where
   pprint (Polynomial c ws) = intercalate "+" $
@@ -65,6 +53,15 @@ instance PPrint Polynomial where
     | (n, w) <- Map.assocs ws
     , w /= 0
     ]
+
+-- spreadsheets {{{1
+type Summary = Map CellName Polynomial
+data Spreadsheet = Spreadsheet
+  { values       :: SpreadsheetValues
+  , formulas     :: SpreadsheetFormulas
+  , summary      :: Summary
+  , dependencies :: Map CellName (Set CellName) -- if (k, vs) is in this map, when cell k changes, all the cells in vs should change by running the appropriate "get" function
+  } deriving (Eq, Ord, Show, Read)
 
 instance PPrint (Map CellName (Formula, Polynomial)) where
   pprint m = unlines
@@ -78,77 +75,7 @@ instance PPrint Spreadsheet where
                "Values", pprint (values sheet)
               ]
 
-
-
------------------------------------------------------------------
----------------------------- Parser -----------------------------
-
-parseCellName = many1 (noneOf " >")
-parseConst    = many1 (noneOf "#")
-
-class    Parseable a       where parser :: Stream s m Char => ParsecT s u m a
-instance Parseable Op      where 
-  parser = (string "+" >> return Plus)  <|> (string "-" >> return Minus) 
-instance Parseable Formula where
-  parser = chainl1 (parens <|> cell) (BinOp <$> parser) where
-    cell   = string "<" *> (Cell <$> parseCellName) <* string ">"
-    parens = string "(" *> parser <* string ")"
-
-instance Parseable Equation where
-  parser = do
-    n <- parseCellName
-    string " = "
-    f <- parser
-    return (Equation n f)
-
-instance Parseable SpreadsheetFormulas where
-  parser = munge <$> many (optional parser <* string "\n") where
-    munge xs = Map.fromList [(n,f) | Just (Equation n f) <- xs]
-
 instance Parseable Spreadsheet where parser = finalize <$> parser
-                                      
----------------------------------------------------------------                                      
-                                      
-                                      
-type Weight = Double
-data Polynomial = Polynomial
-  { constant  :: Weight
-  , monomials :: Map CellName Weight
-  } deriving (Eq, Ord, Show, Read)
-
-monomial c w = Polynomial 0 (Map.singleton c w)
-fromDouble c = Polynomial c Map.empty
-fromFormula (Cell n) = Polynomial 0 (Map.singleton n 1)
-fromFormula (BinOp o f1 f2) = undefined --op o (fromFormula f1) (fromFormula f2)
-
-instance Num Polynomial where
-  fromInteger n = Polynomial (fromInteger n) Map.empty
-  Polynomial c ms + Polynomial c' ms' = Polynomial (c+c') (Map.unionWith (+) ms ms')
-  Polynomial c ms - Polynomial c' ms' = Polynomial (c-c') (Map.unionWith (-) ms ms')
-  negate (Polynomial c ms) = Polynomial (negate c) (negate <$> ms)
-
-  (*)    = error "multiplication is not well-defined for this simple class of polynomials"
-  abs    = error "absolute value is not well-defined for polynomials"
-  signum = error "signum is not well-defined for polynomials"
-
--- scalar multiplication and addition
-v .* Polynomial c ms = Polynomial (v * c) ((v*) <$> ms)
-v .+ p = fromDouble v + p
-
--- variable substitution for polynomials
-subst :: Map CellName Polynomial -> Polynomial -> Polynomial
-subst ps (Polynomial c ms) = c .+ sum
-  [ maybe (monomial cell weight) (weight .*) (Map.lookup cell ps)
-  | (cell, weight) <- Map.assocs ms
-  ]
-
-type Summary = Map CellName Polynomial
-data Spreadsheet = Spreadsheet
-  { values       :: SpreadsheetValues
-  , formulas     :: SpreadsheetFormulas
-  , summary      :: Summary
-  , dependencies :: Map CellName (Set CellName) -- if (k, vs) is in this map, when cell k changes, all the cells in vs should change by running the appropriate "get" function
-  } deriving (Eq, Ord, Show, Read)
 
 -- flatten formulas that reference cells with formulas into them into flat
 -- polynomials that refer directly to base cells
@@ -166,6 +93,8 @@ finalize formulas = Spreadsheet values_ formulas_ summary_ dependencies_ where
 
 -- find the fixpoint of a function by iterating it and crossing our fingers
 eqFix f x = let x' = f x in if x == x' then x else eqFix f x'
+
+-- updates {{{1
 
 -- not using SpreadsheetValues here when we expect to return a
 -- differently-shaped map (i.e. one defined on a different domain of CellNames)
@@ -208,10 +137,8 @@ setValue :: CellName -> Value -> Spreadsheet -> Spreadsheet
 setValue name value sheet = unsafeSetRoots newRoots sheet where
   polynomial = Map.findWithDefault (monomial name 1) name (summary sheet)
   newRoots   = polyPut polynomial value (values sheet)
-  
-  
-----------------------------------------------------------------------
----------------------------------------------------------------------
+
+-- IO {{{1
 
 prompt s = do
   putStr s
