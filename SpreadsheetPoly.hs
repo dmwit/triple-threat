@@ -26,6 +26,14 @@ instance Num Polynomial where
   abs    = error "absolute value is not well-defined for polynomials"
   signum = error "signum is not well-defined for polynomials"
 
+instance PPrint Polynomial where
+  pprint (Polynomial c ws) = intercalate "+" $
+    [ show c | c /= 0 ] ++
+    [ show w ++ "*<" ++ n ++ ">"
+    | (n, w) <- Map.assocs ws
+    , w /= 0
+    ]
+
 -- TODO: handle this more gracefully
 smallOp Plus  = (+)
 smallOp Minus = (-)
@@ -45,14 +53,6 @@ subst ps (Polynomial c ms) = c .+ sum
   [ maybe (monomial cell weight) (weight .*) (Map.lookup cell ps)
   | (cell, weight) <- Map.assocs ms
   ]
-
-instance PPrint Polynomial where
-  pprint (Polynomial c ws) = intercalate "+" $
-    [ show c | c /= 0 ] ++
-    [ show w ++ "*<" ++ n ++ ">"
-    | (n, w) <- Map.assocs ws
-    , w /= 0
-    ]
 
 -- spreadsheets {{{1
 type Summary = Map CellName Polynomial
