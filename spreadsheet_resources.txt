@@ -80,3 +80,10 @@ Automatic generation and maintenance of correct spreadsheets: http://dl.acm.org/
   - Syntax for generating spreadsheet templates
 An end-user oriented graph-based visualization for spreadsheets: http://dl.acm.org/citation.cfm?id=1370866
   - Visualize data flow in a spreadsheet
+Model-Based Programming Environments for Spreadsheets: http://www3.dsi.uminho.pt/seeum2010/CD/artigos/1697-4.pdf
+From Spreadsheets to Relational Databases and Back: http://wiki.di.uminho.pt/twiki/pub/Personal/Jacome/WebHome/sle08.pdf
+  - these two papers are primarily discussing a bidirectional transformation
+    where the entire spreadsheet is one of the replicas, so only tangentially
+    related (a big part of the technical contribution seems to be inferring
+    tabular
+structure and functional dependencies)
