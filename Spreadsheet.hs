@@ -1,6 +1,9 @@
 module Spreadsheet where
 
 import SpreadsheetCommon
+import System.Environment
+import System.IO
+
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Maybe as Maybe
@@ -26,6 +29,12 @@ updateValue name val sheet = updateValues (Map.insert name val (values sheet)) s
 
 instance PPrint Spreadsheet where
   pprint sheet = unlines $ ["Formulas", pprint (formulas sheet), "Values", pprint (values sheet)]
+  
+----------------------------------------------------------------
+---------------------- Parser ----------------------------------
+  
+instance Parseable Spreadsheet where 
+  parser = finalize <$> parser
 
 
 -----------------------------------------------------------------
@@ -61,7 +70,7 @@ cell_put (BinOp o f1 f2) val values =
   let v_old = (op o) v1_old v2_old in
   -- compute v1_new, determine v2_new from v1_new
   let v1_new = 
-        if v_old == 0 then
+        if v_old == 0 || isInfinite v_old || isNaN v_old then
           get_default1 o val
         else
           let scale = get_scale o v_old val in
@@ -79,7 +88,7 @@ addFormula formulas name formula = Map.insert name formula formulas
 
 -- 2 -- build a dependency graph from the formulas given, and check
 --      that the graph forms a tree
-finalize :: SpreadsheetFormulas -> Maybe Spreadsheet
+finalize :: SpreadsheetFormulas -> Spreadsheet
 build_dependencies :: SpreadsheetFormulas -> Set CellName -> DependencyGraph
 get_children :: Formula -> Set CellName
 get_descendants :: SpreadsheetFormulas -> Set CellName -> Set CellName
@@ -137,7 +146,7 @@ add_parents gr children parents = Set.fold f gr children where
 
 --     finalize should include a check that the dependency graph is acyclic
 finalize formulas = 
-  Just $ Spreadsheet formulas Map.empty $ build_dependencies formulas (Set.fromList (Map.keys formulas))
+  Spreadsheet formulas Map.empty $ build_dependencies formulas (Set.fromList (Map.keys formulas))
 --  case build_dependencies formulas (Map.keys formulas) of
 --    Just tree ->
 --      if check_forest tree (Map.keys tree) Set.empty then
@@ -163,7 +172,7 @@ step sheet name val =
 -- check: if the operation doesn't do anything, do not recurse up (or down)
 sweep_get :: SpreadsheetFormulas -> SpreadsheetValues -> DependencyGraph -> Set CellName -> SpreadsheetValues
 sweep_get f v t siblings = 
-  let parents = get_parents t siblings in
+  let parents = Set.difference (get_parents t siblings) siblings in
   -- call get on all the parents
   let v' = Set.fold g v parents where
         g parent v' = Map.insert parent value v' where
@@ -180,4 +189,26 @@ sweep_put f v siblings = Set.fold push v siblings where
       let children = get_children formula in
       sweep_put f v' children
     (_, _) -> v
+    
+prompt s = do
+  putStr s
+  hFlush stdout
+  getLine
+    
+setValueLoop s = do
+  putStr (pprint s)
+  cellName <- prompt "Change cell: "
+  cellValue <- prompt "Change value to: "
+  case reads cellValue of
+    [(v,"")] -> setValueLoop (step s cellName v)
+    _ -> putStrLn "That doesn't look like a number to me!" >> setValueLoop s
   
+main = do
+  a <- getArgs
+  case a of
+    [fileName] -> do
+      s <- readFile fileName
+      case parse parser fileName s of
+        Left err -> print err
+        Right eqs -> setValueLoop eqs
+    _ -> putStrLn "Call with one argument naming a file with a list of equations, one on each line"
