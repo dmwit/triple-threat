@@ -6,23 +6,22 @@ module SpreadsheetCommon
   , module Data.List
   , module Text.Parsec
   , Map
-  , Set
+  , Set.Set
   ) where
 
 import Control.Applicative
 import Control.Monad
 import Data.List
 import Data.Map
-import Data.Set (Set)
+import qualified Data.Set as Set
 import Text.Parsec hiding (many, optional, (<|>))
 
 type CellName = String
 type Value    = Double
 type SpreadsheetFormulas = Map CellName Formula
 type SpreadsheetValues   = Map CellName Value
-type DependencyGraph     = Map CellName [CellName]
---DependencyTree: Each cell gets mapped to its parent, if it has one
-type DependencyTree      = Map CellName CellName
+--DependencyGraph: Each cell gets mapped to the set of its parents
+type DependencyGraph     = Map CellName (Set.Set CellName)
 
 data Formula
   = Cell CellName
@@ -65,8 +64,8 @@ instance PPrint Op where
 instance PPrint DependencyGraph where
   pprint m = unlines [cellName ++ " = " ++ pprint namesList | (cellName, namesList) <- assocs m]
 
-instance PPrint DependencyTree where
-  pprint m = unlines [cellName ++ " = " ++ name | (cellName, name) <- assocs m]
+instance PPrint (Set.Set CellName) where
+  pprint s = pprint (Set.elems s)
 
 -----------------------------------------------------------------
 ---------------------------- Parser -----------------------------

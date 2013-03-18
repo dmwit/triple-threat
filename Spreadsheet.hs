@@ -17,6 +17,8 @@ data Spreadsheet = Spreadsheet
     -- such that formula v1 is a function of v
   , dependencies :: DependencyGraph
   } deriving (Eq, Ord, Show, Read)
+             
+null_sheet = Spreadsheet Map.empty Map.empty Map.empty
 
 updateValues :: SpreadsheetValues -> Spreadsheet -> Spreadsheet
 updateValues new_values sheet = Spreadsheet (formulas sheet) new_values (dependencies sheet)
@@ -34,7 +36,7 @@ instance PPrint Spreadsheet where
 ---------------------- Parser ----------------------------------
   
 instance Parseable Spreadsheet where 
-  parser = finalize <$> parser
+  parser = (\ s -> Maybe.fromMaybe null_sheet (finalize s)) <$> parser
 
 
 -----------------------------------------------------------------
@@ -88,7 +90,7 @@ addFormula formulas name formula = Map.insert name formula formulas
 
 -- 2 -- build a dependency graph from the formulas given, and check
 --      that the graph forms a tree
-finalize :: SpreadsheetFormulas -> Spreadsheet
+finalize :: SpreadsheetFormulas -> Maybe Spreadsheet
 build_dependencies :: SpreadsheetFormulas -> Set CellName -> DependencyGraph
 get_children :: Formula -> Set CellName
 get_descendants :: SpreadsheetFormulas -> Set CellName -> Set CellName
@@ -120,40 +122,53 @@ add_parents gr children parents = Set.fold f gr children where
   f child gr = Map.insertWith Set.union child parents gr
 
 
---has_root :: DependencyGraph -> CellName -> Set CellName -> Maybe (Set CellName)
---has_root tree name seen =
-  -- if name has been seen already then we followed a loop
---  if Set.member name seen then Nothing else
---    let seen_with_name = Set.insert name seen in
---    case Map.lookup name tree of
---      Just parent ->
---        case has_root tree parent seen_with_name of
---          Just seen' -> Just (Set.union seen_with_name seen')
---          Nothing    -> Nothing --has no root
---      Nothing     -> Just seen_with_name --has no parent, so name is a root
+  
+get_independent_children :: Formula -> Maybe (Set CellName)
+get_independent_children (Cell name) = Just $ Set.singleton name
+get_independent_children (BinOp _ f1 f2) = 
+  let children1 = get_independent_children f1 in
+  let children2 = get_independent_children f2 in
+  let intersect_is_null s1 s2 = Set.null (Set.intersection s1 s2) in
+    if Maybe.fromMaybe False (liftM2 intersect_is_null children1 children2) then 
+      liftM2 Set.union children1 children2 
+    else
+      Nothing
 
---check_forest :: DependencyGraph -> [CellName] -> Set CellName -> Bool
---check_forest tree [] _              = True
---check_forest tree (name:names) seen =
---  if Set.member name seen then
---    check_forest tree names seen
---  else
---    case has_root tree name Set.empty of
---      Just seen' -> check_forest tree names (Set.union seen seen')
---      Nothing    -> False
+has_independent_children :: SpreadsheetFormulas -> CellName -> Bool
+has_independent_children formulas name =
+  Maybe.maybe True f (Map.lookup name formulas) where 
+    f formula = Maybe.isJust (get_independent_children formula)
+
+  
+-- check_dependency should be called on the set of roots
+check_single_path :: SpreadsheetFormulas -> DependencyGraph -> CellName -> Set CellName -> Maybe (Set CellName) 
+check_single_path formulas gr name seen =
+  if Set.member name seen then Nothing 
+  else if not (has_independent_children formulas name) then Nothing else 
+    Set.fold f (Just (Set.insert name seen)) $ get_parents gr (Set.singleton name) where 
+      -- f :: CellName -> Maybe (Set CellName) -> Maybe (Set CellName)
+      f parent maybe_seen = Maybe.maybe Nothing (check_single_path formulas gr parent) maybe_seen
 
 
+-- get nodes which do not have any children
+get_roots :: SpreadsheetFormulas -> Set CellName -> Set CellName
+get_roots f cells =
+  Set.fold g Set.empty cells where
+    g name currRoots = Maybe.maybe (Set.insert name currRoots) (\ x -> currRoots) (Map.lookup name f)
 
---     finalize should include a check that the dependency graph is acyclic
+check_dependency :: SpreadsheetFormulas -> DependencyGraph -> Bool
+check_dependency f gr =
+  let roots = get_roots f (Map.keysSet gr) in
+  Set.fold g True roots where
+    g name False = False
+    g name True  = Maybe.isJust (check_single_path f gr name Set.empty) 
+
+
 finalize formulas = 
-  Spreadsheet formulas Map.empty $ build_dependencies formulas (Set.fromList (Map.keys formulas))
---  case build_dependencies formulas (Map.keys formulas) of
---    Just tree ->
---      if check_forest tree (Map.keys tree) Set.empty then
---         Just $ Spreadsheet formulas Map.empty tree
---      else
---        Nothing
---    Nothing   -> Nothing
+  let gr = build_dependencies formulas (Map.keysSet formulas) in
+  let roots = get_roots formulas (Map.keysSet formulas) in
+  if check_dependency formulas gr then Just (Spreadsheet formulas Map.empty gr) else Nothing
+  
 
 --3: edit values in the spreadsheet to populate the spreadsheet
 step :: Spreadsheet -> CellName -> Value -> Spreadsheet
