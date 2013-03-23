@@ -61,7 +61,28 @@ Constraint Programming and Spreadsheets
 
 Multi-way Constraints and Spreadsheets
 ---------------------------------------
+The basic idea of multi-way local propagation constraints is pretty slick. It goes like this:
+1. Each constraint connects some set of variables.
+2. Each constraint can have a collection of "methods" for propagating updates
+   locally that restores the constraint.
+3. When an update happens, do a *search* for a collection of methods to use to
+   restore as many constraints as possible. Critically, this may leave some
+   constraints unsatisfied! A collection of methods to use is "good" when
+   there's no other collection of methods that results in a strict superset of
+   satisfied constraints.
+Cycles are allowed, provided there's an external solver that can take a given
+method cycle and resolve it. Critically (compared to us):
+1. Constraints are allowed to be broken.
+2. Once a given collection of methods is chosen, all choices are local.
+   (Whereas we are at least exploring the possibility of global update
+   computation.)
+3. There's a bit better story about cycles than what we've got so far. (That
+   is, there exists a story!)
+Additionally, they add a wrinkle by giving constraints strengths; this gives
+the user a bit of control over which methods are chosen, but I think isn't
+really a particularly fundamental challenge.
 * Analyzing and debugging hierarchies of multi-way local propagation constraints: http://pdf.aminer.org/000/548/003/analyzing_and_debugging_hierarchies_of_multi_way_local_propagation_constraints.pdf  - debugging inside of SkyBlue, which uses constraint heiarchies to prioritize constraints
+  - discusses the design of an algorithm for computing all possible good method collections (with some focus on making it efficient as well)
 * Multi-way versus one-way constraints in user interfaces: Experience with the DeltaBlue Algorithm: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.38.2714&rep=rep1&type=pdf
 * Graphical techniques in a spreadsheet for specifying user interfaces: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.18.3001&rep=rep1&type=pdf
   - Use spreadsheets to define constraints, instead of using constraints to define spreadsheets
