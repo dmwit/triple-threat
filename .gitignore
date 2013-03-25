@@ -2,3 +2,7 @@
 *.log
 *.pdf
 *.png
+*.hi
+*.o
+SpreadsheetPoly
+Spreadsheet
