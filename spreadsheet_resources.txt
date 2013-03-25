@@ -41,7 +41,7 @@ Data-bidirectional spreadsheet: http://www.google.com/patents/US20040044954
   - Describes using variables in a spreadsheet that were defined outside the spreadsheet
   - Allows edits to the variable inside the spreadsheet to be propogated outside the spreadsheet
 Method of bidirectional recalculation: http://www.google.com/patents/US5339410
-  
+
 Constraint Programming and Spreadsheets
 ---------------------------------------
 * A spreadsheet interface for logic programming: http://dl.acm.org/citation.cfm?doid=67450.67466
@@ -66,7 +66,7 @@ Constraint Programming and Spreadsheets
   - if the restructured graph satisfies certain properties, then can achieve backtrack-free solution
 
 Multi-way Constraints and Spreadsheets
----------------------------------------
+--------------------------------------
 The basic idea of multi-way local propagation constraints is pretty slick. It goes like this:
 1. Each constraint connects some set of variables.
 2. Each constraint can have a collection of "methods" for propagating updates
@@ -87,7 +87,7 @@ method cycle and resolve it. Critically (compared to us):
 Additionally, they add a wrinkle by giving constraints strengths; this gives
 the user a bit of control over which methods are chosen, but I think isn't
 really a particularly fundamental challenge.
-* Analyzing and debugging hierarchies of multi-way local propagation constraints: http://pdf.aminer.org/000/548/003/analyzing_and_debugging_hierarchies_of_multi_way_local_propagation_constraints.pdf  
+* Analyzing and debugging hierarchies of multi-way local propagation constraints: http://pdf.aminer.org/000/548/003/analyzing_and_debugging_hierarchies_of_multi_way_local_propagation_constraints.pdf
   - debugging inside of SkyBlue, which uses constraint heiarchies to prioritize constraints
   - discusses the design of an algorithm for computing all possible good method collections (with some focus on making it efficient as well)
 * Multi-way versus one-way constraints in user interfaces: Experience with the DeltaBlue Algorithm: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.38.2714&rep=rep1&type=pdf
@@ -102,7 +102,7 @@ Operation transforms for a distributed shared spreadsheet: http://dl.acm.org/cit
 
 
 Structured Spreadsheets
-------------------------
+-----------------------
 UCheck: A spreadsheet type checker for end users: http://web.engr.oregonstate.edu/~erwig/papers/UCheck_JVLC07.pdf
   - Automatically detects errors by means of a unit reasoning system
 Automatic generation and maintenance of correct spreadsheets: http://dl.acm.org/citation.cfm?id=1062494
