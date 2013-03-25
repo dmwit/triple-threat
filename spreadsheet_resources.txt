@@ -58,6 +58,12 @@ Constraint Programming and Spreadsheets
 * A New Basis for Spreadsheet Computing: http://www.aaai.org/ojs/index.php/aimagazine/article/view/1533
   - two focuses: (1) representing non-exact numeric values (ranges, distributions) and (2) constraint propogation to fill in any cell determined by the other cells in the equation.
   - fully integrated with Excel, might be a good model of such integration
+* A sufficient condition for backtrack-free search: http://www.cs.cmu.edu/~arielpro/mfai_papers/jacm82.pdf
+  - studies relationship between structure of constraint graph, an ordering on that graph, and when that search order is backtrack-free (can update without backtracking)
+  - Since out constraints are ``ordered'' themselves, can we specialize their notion of ordering to make a good order easy to find?
+* Tree clustering for constraint networks: http://cse.unl.edu/~choueiry/Documents/Dechter-TC-AIJ89.pdf
+  - restructure a constraint graph into cliques that form a tree structure
+  - if the restructured graph satisfies certain properties, then can achieve backtrack-free solution
 
 Multi-way Constraints and Spreadsheets
 ---------------------------------------
@@ -81,7 +87,8 @@ method cycle and resolve it. Critically (compared to us):
 Additionally, they add a wrinkle by giving constraints strengths; this gives
 the user a bit of control over which methods are chosen, but I think isn't
 really a particularly fundamental challenge.
-* Analyzing and debugging hierarchies of multi-way local propagation constraints: http://pdf.aminer.org/000/548/003/analyzing_and_debugging_hierarchies_of_multi_way_local_propagation_constraints.pdf  - debugging inside of SkyBlue, which uses constraint heiarchies to prioritize constraints
+* Analyzing and debugging hierarchies of multi-way local propagation constraints: http://pdf.aminer.org/000/548/003/analyzing_and_debugging_hierarchies_of_multi_way_local_propagation_constraints.pdf  
+  - debugging inside of SkyBlue, which uses constraint heiarchies to prioritize constraints
   - discusses the design of an algorithm for computing all possible good method collections (with some focus on making it efficient as well)
 * Multi-way versus one-way constraints in user interfaces: Experience with the DeltaBlue Algorithm: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.38.2714&rep=rep1&type=pdf
 * Graphical techniques in a spreadsheet for specifying user interfaces: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.18.3001&rep=rep1&type=pdf

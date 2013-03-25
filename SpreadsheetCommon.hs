@@ -30,12 +30,15 @@ data Formula
 
 data Equation = Equation CellName Formula deriving (Eq, Ord, Show, Read)
 
-data Op = Plus | Minus | Times | Div deriving (Eq, Ord, Show, Read)
+data Op = Plus | Minus | Times | Div | Pow | Min | Max deriving (Eq, Ord, Show, Read)
 
 op Plus  = (+)
 op Minus = (-)
 op Times = (*)
 op Div   = (/)
+op Pow   = (**)
+op Min   = min
+op Max   = max
 
 -----------------------------------------------------------------
 ------------------- Pretty Printer ------------------------------
@@ -60,6 +63,9 @@ instance PPrint Op where
   pprint Minus = "-"
   pprint Times = "*"
   pprint Div   = "/"
+  pprint Pow   = "^"
+  pprint Min   = "\\/"
+  pprint Max   = "/\\"
 
 instance PPrint DependencyGraph where
   pprint m = unlines [cellName ++ " = " ++ pprint namesList | (cellName, namesList) <- assocs m]
@@ -82,6 +88,7 @@ instance Parseable Op where
     , "-" --> Minus
     , "*" --> Times
     , "/" --> Div
+    , "^" --> Pow  
     ] where s --> o = string s >> return o
 
 instance Parseable Formula where

@@ -44,42 +44,99 @@ instance Parseable Spreadsheet where
 
 put3 :: Op -> Value -> Value -> Value
 -- put3 o v1 v2 = v3 means v1 = (op o) v2 v3
-put3 Plus  v1 v2 = (op Minus) v1 v2
-put3 Minus v1 v2 = (op Minus) v2 v1
-put3 Times v1 v2 = (op Div) v1 v2
-put3 Div   v1 v2 = (op Div) v2 v1
+put3 Plus  v1 v2 = v1 - v2
+put3 Minus v1 v2 = v2 - v1
+put3 Times v1 v2 = v1 / v2
+put3 Div   v1 v2 = v2 / v1
+put3 Pow   v1 v2 = logBase v2 v1
 
-get_scale Plus  v_old v_new = v_new / v_old
-get_scale Minus v_old v_new = v_new / v_old
-get_scale Times v_old v_new = sqrt (abs (v_new / v_old))
-get_scale Div   v_old v_new = sqrt (abs (v_new / v_old))
+default_split Plus  v_new = (v_new / 2,v_new / 2)
+default_split Minus v_new = (v_new, 0)
+default_split Times v_new = (sqrt (abs v_new), sqrt(abs v_new))
+default_split Div   v_new = (v_new,1)
+default_split Pow   v_new = (v_new,1)
+default_split Min   v_new = (v_new,v_new)
+default_split Max   v_new = (v_new,v_new)
 
-get_default1 Plus  v_new = v_new / 2
-get_default1 Minus v_new = v_new
-get_default1 Times v_new = sqrt (abs v_new)
-get_default1 Div   v_new = v_new
+invalid :: Op -> Value -> Value -> Value -> Bool
+invalid Pow _     v1_old _ = v1_old == 0 
+invalid _   v_old _      _ = v_old == 0
+
+cell_get_maybe :: Formula -> SpreadsheetValues -> Maybe Value
+cell_get_maybe (Cell new_name) values = Map.lookup new_name values
+cell_get_maybe (BinOp o f1 f2) values = liftM2 (op o) (cell_get_maybe f1 values) (cell_get_maybe f2 values)
 
 cell_get :: Formula -> SpreadsheetValues -> Value
-cell_get (Cell new_name) values = Maybe.fromMaybe 0 $ Map.lookup new_name values
-cell_get (BinOp o f1 f2) values = (op o) (cell_get f1 values) (cell_get f2 values)
+cell_get formula values = Maybe.fromMaybe 0 $ cell_get_maybe formula values
 
-cell_put :: Formula -> Value -> SpreadsheetValues -> SpreadsheetValues
-cell_put (Cell target)       val values = Map.insert target val values
+cell_put :: Formula -> Maybe Value -> SpreadsheetValues -> SpreadsheetValues
+cell_put (Cell target)   val values = Maybe.maybe (Map.delete target values) (\v -> Map.insert target v values) val
 cell_put (BinOp o f1 f2) val values =
-  let v1_old = cell_get f1 values in
-  let v2_old = cell_get f2 values in
-  -- compute old value of the formula
-  let v_old = (op o) v1_old v2_old in
-  -- compute v1_new, determine v2_new from v1_new
-  let v1_new = 
-        if v_old == 0 || isInfinite v_old || isNaN v_old then
-          get_default1 o val
-        else
-          let scale = get_scale o v_old val in
-          scale * v1_old
-  in
-  let v2_new = put3 o val v1_new in
+  let v1_old = cell_get_maybe f1 values in
+  let v2_old = cell_get_maybe f2 values in
+  let (v1_new,v2_new) = Maybe.maybe (Nothing,Nothing) fun val where
+        fun v = lift_pair (split_op o v v1_old v2_old)
+        lift_pair (x,y) = (Just x,Just y)
+  in 
   cell_put f2 v2_new (cell_put f1 v1_new values)
+  
+
+split_op :: Op -> Value -> Maybe Value -> Maybe Value -> (Value,Value)
+split_op o v_new mv1_old mv2_old = 
+  let v_old = liftM2 (op o) mv1_old mv2_old in
+  case v_old of
+    Nothing    -> default_split o v_new
+    Just v_old -> 
+      --since v_old is defined, v1_old and v2_old are defined
+      let v1_old = Maybe.fromMaybe 0 mv1_old in
+      let v2_old = Maybe.fromMaybe 0 mv2_old in
+      if invalid o v_old v1_old v2_old then 
+        default_split o v_new 
+      else
+        case o of
+          Plus -> 
+            let scale = v_new / v_old in
+            let v1 = scale * v1_old in
+            let v2 = put3 Plus v_new v1 in
+            (v1, v2) 
+          Minus ->
+            let scale = v_new / v_old in
+            let v1 = scale * v1_old in
+            let v2 = put3 Minus v_new v1 in
+            (v1, v2)
+          Times ->
+            let scale = sqrt (abs (v_new / v_old)) in
+            let v1 = scale * v1_old in
+            let v2 = put3 Times v_new v1 in
+            (v1, v2)
+          Div ->
+            let scale = sqrt (abs (v_new / v_old)) in
+            let v1 = scale * v1_old in
+            let v2 = put3 Div v_new v1 in 
+            (v1,v2)
+          Pow ->
+            let v2 = put3 Pow v_new v1_old in
+            (v1_old, v2)
+          Min ->
+            let v1 = max v1_old v_new in
+            let v2 = max v2_old v_new in
+            if v1 == v2 then
+              (v_new,v_new) 
+            else if v1 < v2 then
+                   (v_new,v2) 
+                 else
+                   (v1,v_new)
+          Max ->
+            let v1 = min v1_old v_new in
+            let v2 = min v2_old v_new in
+            if v1 == v2 then
+              (v_new,v_new)
+            else if v1 > v2 then
+                   (v_new,v2)
+                 else
+                   (v1,v_new)
+  
+  
 
 --------------------------------------------------------------------
 --------------------- Evaluation -----------------------------------
@@ -190,20 +247,23 @@ sweep_get f v t siblings =
   let parents = Set.difference (get_parents t siblings) siblings in
   -- call get on all the parents
   let v' = Set.fold g v parents where
-        g parent v' = Map.insert parent value v' where
-          value = Maybe.maybe 0 (\ formula -> cell_get formula v') (Map.lookup parent f) in
+        g parent v' = Maybe.maybe (Map.delete parent v') (\value->Map.insert parent value v') maybe_val where
+                      maybe_val = Maybe.maybe Nothing (\formula -> cell_get_maybe formula v') (Map.lookup parent f)
+  in 
   if Set.null parents then v' else
     sweep_get f v' t parents
   
 --Update the values of your children
 sweep_put :: SpreadsheetFormulas -> SpreadsheetValues -> Set CellName -> SpreadsheetValues 
 sweep_put f v siblings = Set.fold push v siblings where
-  push name v = case (Map.lookup name v, Map.lookup name f) of
-    (Just value, Just formula) ->
+  push name v = case Map.lookup name f of
+    Just formula -> 
+      let value = Map.lookup name v in
       let v' = cell_put formula value v in
       let children = get_children formula in
       sweep_put f v' children
-    (_, _) -> v
+    Nothing      -> v
+
     
 prompt s = do
   putStr s
