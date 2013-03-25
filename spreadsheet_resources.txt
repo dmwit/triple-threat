@@ -93,6 +93,7 @@ really a particularly fundamental challenge.
 * Multi-way versus one-way constraints in user interfaces: Experience with the DeltaBlue Algorithm: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.38.2714&rep=rep1&type=pdf
 * Graphical techniques in a spreadsheet for specifying user interfaces: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.18.3001&rep=rep1&type=pdf
   - Use spreadsheets to define constraints, instead of using constraints to define spreadsheets
+* SkyBlue: A Multi-Way Local Propagation Constraint Solver for User Interface Construction: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.32.6479&rep=rep1&type=pdf
 
 Distributed Spreadsheets
 ------------------------
@@ -115,3 +116,11 @@ From Spreadsheets to Relational Databases and Back: http://wiki.di.uminho.pt/twi
     related (a big part of the technical contribution seems to be inferring
     tabular
 structure and functional dependencies)
+
+Databases: How-To, What-If, and Reverse Data Dependencies
+---------------------------------------------------------
+Caravan: Provisioning for What-If Analysis: http://www.cidrdb.org/cidr2013/Papers/CIDR13_Paper100.pdf
+  - run many related queries at once, with a compact representation of the answers to all of them
+Reverse Data Management: http://homes.cs.washington.edu/~suciu/p1490-meliou.pdf
+Tiresias: The Database Oracle for How-To Queries: http://homes.cs.washington.edu/~suciu/file23_main.pdf
+Tiresias: A Demonstration of How-To Queries: http://db.cs.washington.edu/tiresias/papers/Tiresias-demo.pdf
