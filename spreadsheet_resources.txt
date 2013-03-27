@@ -123,4 +123,5 @@ Caravan: Provisioning for What-If Analysis: http://www.cidrdb.org/cidr2013/Paper
   - run many related queries at once, with a compact representation of the answers to all of them
 Reverse Data Management: http://homes.cs.washington.edu/~suciu/p1490-meliou.pdf
 Tiresias: The Database Oracle for How-To Queries: http://homes.cs.washington.edu/~suciu/file23_main.pdf
+  - extend non-recursive Datalog with nondeterministic capabilities and an objective function, then show how to implement it in a way that's better than doing the nondeterminism by search (use mixed integer programming instead)
 Tiresias: A Demonstration of How-To Queries: http://db.cs.washington.edu/tiresias/papers/Tiresias-demo.pdf
