@@ -19,7 +19,6 @@ data Polynomial = Polynomial
 instance Num Polynomial where
   fromInteger n = Polynomial (fromInteger n) Map.empty
   Polynomial c ms + Polynomial c' ms' = Polynomial (c+c') (Map.unionWith (+) ms ms')
-  Polynomial c ms - Polynomial c' ms' = Polynomial (c-c') (Map.unionWith (-) ms ms')
   negate (Polynomial c ms) = Polynomial (negate c) (negate <$> ms)
 
   (*)    = error "multiplication is not well-defined for this simple class of polynomials"
