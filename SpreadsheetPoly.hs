@@ -1,6 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 module SpreadsheetPoly where
 
+import Data.Packed
+import Numeric.Container ((<>))
+import Numeric.LinearAlgebra.Algorithms
+import Numeric.LinearAlgebra.Util
 import SpreadsheetCommon
 import System.Environment
 import System.IO
@@ -53,6 +57,32 @@ subst ps (Polynomial c ms) = c .+ sum
   | (cell, weight) <- Map.assocs ms
   ]
 
+-- static check {{{1
+type ExecutionPlan = ([CellName], Matrix Value)
+
+-- Given a bunch of polynomials, check whether forall v, we can find values of
+-- the input cells such that the polynomials output v. If so, return the
+-- linear transformation that produces a minimal input delta given a minimal
+-- output delta (and an appropriate order for the input names); if not,
+-- Nothing.
+--
+-- This works by producing the linear transformation M corresponding to
+-- applying all the polynomials at once, finding a basis N for the null space
+-- of M, and outputting [M; N]^-1 * [I; 0] where I has as many rows as M does.
+--
+-- TODO: return an Either, with a counterexample showing one of the polynomials
+-- being a linear combination of the others
+planMultiUpdate_ :: [Polynomial] -> Maybe ExecutionPlan
+planMultiUpdate_ ps = guard (length n == c-r) >> Just (roots, inv mn <> i0) where
+	roots  = Set.toList . Set.unions . map (Map.keysSet . monomials) $ ps
+	(r, c) = (length ps, length roots)
+	m  = buildMatrix r c (\(p, r) -> Map.findWithDefault 0 (roots !! r) (monomials (ps !! p)))
+	n  = nullspacePrec 1 m
+	mn = fromBlocks [[m], [fromRows n]]
+	i0 = fromBlocks [[diagl (replicate r 1)], [zeros (c-r) r]]
+
+planMultiUpdate :: Spreadsheet -> [CellName] -> Maybe ExecutionPlan
+planMultiUpdate s cs = planMultiUpdate_ (map (\n -> Map.findWithDefault (monomial n 1) n (summary s)) cs)
 -- spreadsheets {{{1
 type Summary = Map CellName Polynomial
 data Spreadsheet = Spreadsheet
@@ -137,6 +167,28 @@ setValue name value sheet = unsafeSetRoots newRoots sheet where
   polynomial = Map.findWithDefault (monomial name 1) name (summary sheet)
   newRoots   = put polynomial value (values sheet)
 
+-- do a multi-update: given a pre-computed execution plan and a corresponding
+-- mapping of output cells to updated values, run the execution plan to find
+-- the new values of the root nodes and run all the gets necessary to make the
+-- spreadsheet consistent
+--
+-- this is unsafe because it assumes that the execution plan's roots are
+-- available in the spreadsheet, that is, that you've called plantRoots already
+unsafeSetValues :: ExecutionPlan -> [(CellName, Value)] -> Spreadsheet -> Spreadsheet
+unsafeSetValues (roots, transform) outputs sheet = unsafeSetRoots newRootMapping sheet where
+	deltaOutputs   = [v - get (summary sheet Map.! n) (values sheet) | (n, v) <- outputs]
+	deltaRoots     = toList . (transform <>) . fromList $ deltaOutputs
+	oldRoots       = [get (summary sheet Map.! n) (values sheet) | n <- roots]
+	newRoots       = zipWith (+) oldRoots deltaRoots
+	newRootMapping = Map.fromList (zip roots newRoots)
+
+-- ensure that an execution plan's roots all appear in the spreadsheet
+plantRoots :: ExecutionPlan -> Spreadsheet -> Spreadsheet
+plantRoots (roots, _) sheet = sheet { summary = summary sheet `Map.union` Map.fromList [(root, monomial root 1) | root <- roots] }
+
+-- safe but possibly inefficient version of unsafeSetValues
+setValues :: ExecutionPlan -> [CellName] -> [Value] -> Spreadsheet -> Spreadsheet
+setValues plan names values = unsafeSetValues plan (zip names values) . plantRoots plan
 -- IO {{{1
 
 prompt s = do
@@ -144,13 +196,22 @@ prompt s = do
   hFlush stdout
   getLine
 
+readsWords = mapM noJunk . words where
+  noJunk s = [v | (v, "") <- reads s]
+
 setValueLoop s = do
   putStr (pprint s)
-  cellName  <- prompt "Change cell: "
-  cellValue <- prompt "Change the value to: "
-  case reads cellValue of
-    [(v,"")] -> setValueLoop (setValue cellName v s)
-    _ -> putStrLn "That doesn't look like a number to me!" >> setValueLoop s
+  names <- words <$> prompt "Change cells (space-separated): "
+  case planMultiUpdate s names of
+    Nothing   -> putStrLn "Those cells are too closely related." >> setValueLoop s
+    Just plan -> do
+      putStrLn $ "Okay, updating " ++ show names ++ " by modifying " ++ show (fst plan) ++ "."
+      values_ <- prompt "Change the values to: "
+      case readsWords values_ of
+        [] -> putStrLn "That didn't look like numbers to me!" >> setValueLoop s
+        values:_
+          | length values /= length names -> putStrLn "Please give as many values as you gave names." >> setValueLoop s
+          | otherwise -> setValueLoop (setValues plan names values s)
 
 main = do
   a <- getArgs
