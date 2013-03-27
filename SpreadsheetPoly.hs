@@ -101,14 +101,14 @@ eqFix f x = let x' = f x in if x == x' then x else eqFix f x'
 --
 -- for now, put has one available spreading strategy: split the delta up
 -- according to the magnitude of the weights on the monomials
-polyGet :: Polynomial -> SpreadsheetValues -> Value
-polyPut :: Polynomial -> Value -> SpreadsheetValues -> Map CellName Value
-polyGet p v = constant (subst (fromDouble <$> v) p)
-polyPut p@(Polynomial c ms) new v
+get :: Polynomial -> SpreadsheetValues -> Value
+put :: Polynomial -> Value -> SpreadsheetValues -> Map CellName Value
+get p v = constant (subst (fromDouble <$> v) p)
+put p@(Polynomial c ms) new v
   | factor == 0 = error "can't update the value of this cell"
   | otherwise   = Map.mapWithKey (\n w -> cell n + delta * abs w / factor) ms
   where
-  old    = polyGet p v
+  old    = get p v
   delta  = new - old
   factor = sum [w * abs w | w <- Map.elems ms]
   cell n = Map.findWithDefault 0 n v
@@ -126,7 +126,7 @@ unsafeSetRoots newRoots sheet = sheet { values = newValues } where
     | n <- Map.keys newRoots
     ]
   gets = Map.fromList
-    [ (n, polyGet (summary sheet Map.! n) allRoots)
+    [ (n, get (summary sheet Map.! n) allRoots)
     | n <- Set.toList nonRoots
     ]
 
@@ -136,7 +136,7 @@ unsafeSetRoots newRoots sheet = sheet { values = newValues } where
 setValue :: CellName -> Value -> Spreadsheet -> Spreadsheet
 setValue name value sheet = unsafeSetRoots newRoots sheet where
   polynomial = Map.findWithDefault (monomial name 1) name (summary sheet)
-  newRoots   = polyPut polynomial value (values sheet)
+  newRoots   = put polynomial value (values sheet)
 
 -- IO {{{1
 
