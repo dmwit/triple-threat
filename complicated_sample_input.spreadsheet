@@ -1,0 +1,9 @@
+basePriceScrews = <screws>+<screws>+<screws>+<screws>+<screws>+<screws>+<screws>+<screws>+<screws>+<screws>
+taxScrews = <screws>
+totalPriceScrews = <basePriceScrews>+<taxScrews>
+profitScrews = <basePriceScrews>-<costScrews>
+basePriceNails = <nails>+<nails>+<nails>+<nails>+<nails>+<nails>+<nails>+<nails>+<nails>+<nails>
+taxNails = <nails>
+totalPriceNails = <basePriceNails>+<taxNails>
+profitNails = <basePriceNails>-<costNails>
+totalProfit = <profitScrews>+<profitNails>
