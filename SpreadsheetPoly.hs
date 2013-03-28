@@ -38,8 +38,8 @@ instance PPrint Polynomial where
     ]
 
 -- TODO: handle this more gracefully
-smallOp Plus  = (+)
-smallOp Minus = (-)
+smallOp (Infix Plus)  = (+)
+smallOp (Infix Minus) = (-)
 
 monomial c w = Polynomial 0 (Map.singleton c w)
 fromDouble c = Polynomial c Map.empty

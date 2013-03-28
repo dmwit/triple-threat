@@ -42,7 +42,7 @@ instance Parseable Spreadsheet where
 -----------------------------------------------------------------
 ------------------- Lenses on cells -----------------------------
 
-put3 :: Op -> Value -> Value -> Value
+put3 :: InOp -> Value -> Value -> Value
 -- put3 o v1 v2 = v3 means v1 = (op o) v2 v3
 put3 Plus  v1 v2 = v1 - v2
 put3 Minus v1 v2 = v2 - v1
@@ -50,17 +50,19 @@ put3 Times v1 v2 = v1 / v2
 put3 Div   v1 v2 = v2 / v1
 put3 Pow   v1 v2 = logBase v2 v1
 
-default_split Plus  v_new = (v_new / 2,v_new / 2)
-default_split Minus v_new = (v_new, 0)
-default_split Times v_new = (sqrt (abs v_new), sqrt(abs v_new))
-default_split Div   v_new = (v_new,1)
-default_split Pow   v_new = (v_new,1)
-default_split Min   v_new = (v_new,v_new)
-default_split Max   v_new = (v_new,v_new)
+default_split :: Op -> Value -> (Value,Value)
+default_split (Infix  Plus)  v_new = (v_new / 2,v_new / 2)
+default_split (Infix  Minus) v_new = (v_new, 0)
+default_split (Infix  Times) v_new = (sqrt (abs v_new), sqrt(abs v_new))
+default_split (Infix  Div)   v_new = (v_new,1)
+default_split (Infix  Pow)   v_new = (v_new,1)
+default_split (Prefix Min)   v_new = (v_new,v_new)
+default_split (Prefix Max)   v_new = (v_new,v_new)
 
 invalid :: Op -> Value -> Value -> Value -> Bool
-invalid Pow _     v1_old _ = v1_old == 0 
-invalid _   v_old _      _ = v_old == 0
+invalid (Infix Pow)  _     v1_old _ = v1_old == 0 
+invalid (Prefix _)   _     _      _ = False
+invalid _            v_old _      _ = v_old == 0
 
 cell_get_maybe :: Formula -> SpreadsheetValues -> Maybe Value
 cell_get_maybe (Cell new_name) values = Map.lookup new_name values
@@ -94,30 +96,30 @@ split_op o v_new mv1_old mv2_old =
         default_split o v_new 
       else
         case o of
-          Plus -> 
+          Infix Plus -> 
             let scale = v_new / v_old in
             let v1 = scale * v1_old in
             let v2 = put3 Plus v_new v1 in
             (v1, v2) 
-          Minus ->
+          Infix Minus ->
             let scale = v_new / v_old in
             let v1 = scale * v1_old in
             let v2 = put3 Minus v_new v1 in
             (v1, v2)
-          Times ->
+          Infix Times ->
             let scale = sqrt (abs (v_new / v_old)) in
             let v1 = scale * v1_old in
             let v2 = put3 Times v_new v1 in
             (v1, v2)
-          Div ->
+          Infix Div ->
             let scale = sqrt (abs (v_new / v_old)) in
             let v1 = scale * v1_old in
             let v2 = put3 Div v_new v1 in 
             (v1,v2)
-          Pow ->
+          Infix Pow ->
             let v2 = put3 Pow v_new v1_old in
             (v1_old, v2)
-          Min ->
+          Prefix Min ->
             let v1 = max v1_old v_new in
             let v2 = max v2_old v_new in
             if v1 == v2 then
@@ -126,7 +128,7 @@ split_op o v_new mv1_old mv2_old =
                    (v_new,v2) 
                  else
                    (v1,v_new)
-          Max ->
+          Prefix Max ->
             let v1 = min v1_old v_new in
             let v2 = min v2_old v_new in
             if v1 == v2 then

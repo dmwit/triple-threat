@@ -30,15 +30,17 @@ data Formula
 
 data Equation = Equation CellName Formula deriving (Eq, Ord, Show, Read)
 
-data Op = Plus | Minus | Times | Div | Pow | Min | Max deriving (Eq, Ord, Show, Read)
+data InOp = Plus | Minus | Times | Div | Pow deriving (Eq, Ord, Show, Read)
+data PreOp = Min | Max deriving (Eq, Ord, Show, Read)
+data Op = Infix InOp | Prefix PreOp  deriving (Eq, Ord, Show, Read)
 
-op Plus  = (+)
-op Minus = (-)
-op Times = (*)
-op Div   = (/)
-op Pow   = (**)
-op Min   = min
-op Max   = max
+op (Infix Plus)  = (+)
+op (Infix Minus) = (-)
+op (Infix Times) = (*)
+op (Infix Div)   = (/)
+op (Infix Pow)   = (**)
+op (Prefix Min)  = min
+op (Prefix Max)  = max
 
 -----------------------------------------------------------------
 ------------------- Pretty Printer ------------------------------
@@ -56,16 +58,19 @@ instance PPrint [CellName] where pprint cells = intercalate ", " cells
 
 instance PPrint Formula where
   pprint (Cell s) = "<" ++ s ++ ">"
-  pprint (BinOp op f1 f2) = "(" ++ pprint f1 ++ pprint op ++ pprint f2 ++ ")"
+  pprint (BinOp (Infix  o) f1 f2) = "(" ++ pprint f1 ++ pprint o ++ pprint f2 ++ ")"
+  pprint (BinOp (Prefix o) f1 f2) = pprint o ++ "(" ++ pprint f1 ++ "," ++ pprint f2 ++ ")"
 
-instance PPrint Op where
+instance PPrint InOp where
   pprint Plus  = "+"
   pprint Minus = "-"
   pprint Times = "*"
   pprint Div   = "/"
   pprint Pow   = "^"
-  pprint Min   = "\\/"
-  pprint Max   = "/\\"
+  
+instance PPrint PreOp where
+  pprint Min   = "min"
+  pprint Max   = "max"
 
 instance PPrint DependencyGraph where
   pprint m = unlines [cellName ++ " = " ++ pprint namesList | (cellName, namesList) <- assocs m]
@@ -82,7 +87,7 @@ parseConst    = many1 (noneOf "#")
 class Parseable a where
   parser :: Stream s m Char => ParsecT s u m a
 
-instance Parseable Op where
+instance Parseable InOp where
   parser = choice
     [ "+" --> Plus
     , "-" --> Minus
@@ -90,9 +95,17 @@ instance Parseable Op where
     , "/" --> Div
     , "^" --> Pow  
     ] where s --> o = string s >> return o
+            
+instance Parseable PreOp where
+  parser = choice
+    [ "min" --> Min
+    , "max" --> Max
+    ] where s --> o = try (string s) >> return o
+
 
 instance Parseable Formula where
-  parser = chainl1 (parens <|> cell) (BinOp <$> parser) where
+  parser = chainl1 (parens <|> cell) (BinOp . Infix <$> parser) <|> prefix_exp where
+    prefix_exp = BinOp . Prefix <$> parser <* string "(" <*> parser  <* string "," <*> parser <* string ")" 
     cell   = string "<" *> (Cell <$> parseCellName) <* string ">"
     parens = string "(" *> parser <* string ")"
 
