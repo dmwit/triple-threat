@@ -192,7 +192,7 @@ plantRoots (roots, _) sheet = sheet { summary = summary sheet `Map.union` Map.fr
 
 -- safe but possibly inefficient version of unsafeSetValues
 setValues :: ExecutionPlan -> [CellName] -> [Value] -> Spreadsheet -> Spreadsheet
-setValues plan names values = trace (show (zip names values)) $ unsafeSetValues plan (zip names values) . plantRoots plan
+setValues plan names values = unsafeSetValues plan (zip names values) . plantRoots plan
 -- IO {{{1
 
 prompt s = do
@@ -209,7 +209,7 @@ setValueLoop s = do
   case (names, planMultiUpdate s names) of
     ([], _        ) -> putStrLn "You don't want to change anything, and that's fine with me!" >> setValueLoop s
     (_ , Nothing  ) -> putStrLn "Those cells are too closely related." >> setValueLoop s
-    (_ , Just plan) -> trace (show plan) $ do
+    (_ , Just plan) -> do
       putStrLn $ "Okay, updating " ++ show names ++ " by modifying " ++ show (fst plan) ++ "."
       values_ <- prompt "Change the values to: "
       case readsWords values_ of
