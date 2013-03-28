@@ -77,13 +77,13 @@ type ExecutionPlan = ([CellName], Matrix Value)
 -- being a linear combination of the others
 planMultiUpdate_ :: [Polynomial] -> Maybe ExecutionPlan
 planMultiUpdate_ ps = guard (length n == c-r) >> Just (roots, inv mn <> i0) where
-	roots  = Set.toList . Set.unions . map (Map.keysSet . monomials) $ ps
-	(r, c) = (length ps, length roots)
-	m  = buildMatrix r c (\(p, r) -> Map.findWithDefault 0 (roots !! r) (monomials (ps !! p)))
-	n  = nullspacePrec 1 m
-	mn = m `aboveWhenNullspace` fromRows n
-	i0 = diagl (replicate r 1) `aboveWhenNullspace` zeros (c-r) r
-	aboveWhenNullspace m m' = case n of [] -> m; _ -> fromBlocks [[m], [m']]
+  roots  = Set.toList . Set.unions . map (Map.keysSet . monomials) $ ps
+  (r, c) = (length ps, length roots)
+  m  = buildMatrix r c (\(p, r) -> Map.findWithDefault 0 (roots !! r) (monomials (ps !! p)))
+  n  = nullspacePrec 1 m
+  mn = m `aboveWhenNullspace` fromRows n
+  i0 = diagl (replicate r 1) `aboveWhenNullspace` zeros (c-r) r
+  aboveWhenNullspace m m' = case n of [] -> m; _ -> fromBlocks [[m], [m']]
 
 planMultiUpdate :: Spreadsheet -> [CellName] -> Maybe ExecutionPlan
 planMultiUpdate s cs = planMultiUpdate_ (map (\n -> Map.findWithDefault (monomial n 1) n (summary s)) cs)
@@ -180,11 +180,11 @@ setValue name value sheet = unsafeSetRoots newRoots sheet where
 -- available in the spreadsheet, that is, that you've called plantRoots already
 unsafeSetValues :: ExecutionPlan -> [(CellName, Value)] -> Spreadsheet -> Spreadsheet
 unsafeSetValues (roots, transform) outputs sheet = unsafeSetRoots newRootMapping sheet where
-	deltaOutputs   = [v - get (summary sheet Map.! n) (values sheet) | (n, v) <- outputs]
-	deltaRoots     = toList . (transform <>) . fromList $ deltaOutputs
-	oldRoots       = [get (summary sheet Map.! n) (values sheet) | n <- roots]
-	newRoots       = zipWith (+) oldRoots deltaRoots
-	newRootMapping = Map.fromList (zip roots newRoots)
+  deltaOutputs   = [v - get (summary sheet Map.! n) (values sheet) | (n, v) <- outputs]
+  deltaRoots     = toList . (transform <>) . fromList $ deltaOutputs
+  oldRoots       = [get (summary sheet Map.! n) (values sheet) | n <- roots]
+  newRoots       = zipWith (+) oldRoots deltaRoots
+  newRootMapping = Map.fromList (zip roots newRoots)
 
 -- ensure that an execution plan's roots all appear in the spreadsheet
 plantRoots :: ExecutionPlan -> Spreadsheet -> Spreadsheet
