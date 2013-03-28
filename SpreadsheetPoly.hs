@@ -69,17 +69,21 @@ type ExecutionPlan = ([CellName], Matrix Value)
 -- This works by producing the linear transformation M corresponding to
 -- applying all the polynomials at once, finding a basis N for the null space
 -- of M, and outputting [M; N]^-1 * [I; 0] where I has as many rows as M does.
+-- The implementation below is clumsified a bit by the fact that hmatrix
+-- doesn't handle matrices with zero rows (or zero columns) very gracefully,
+-- but hopefully the idea shines through with a bit of inspection.
 --
 -- TODO: return an Either, with a counterexample showing one of the polynomials
 -- being a linear combination of the others
 planMultiUpdate_ :: [Polynomial] -> Maybe ExecutionPlan
 planMultiUpdate_ ps = guard (length n == c-r) >> Just (roots, inv mn <> i0) where
-	roots  = Set.toList . Set.unions . map (Map.keysSet . monomials) $ ps
-	(r, c) = (length ps, length roots)
-	m  = buildMatrix r c (\(p, r) -> Map.findWithDefault 0 (roots !! r) (monomials (ps !! p)))
-	n  = nullspacePrec 1 m
-	mn = fromBlocks [[m], [fromRows n]]
-	i0 = fromBlocks [[diagl (replicate r 1)], [zeros (c-r) r]]
+  roots  = Set.toList . Set.unions . map (Map.keysSet . monomials) $ ps
+  (r, c) = (length ps, length roots)
+  m  = buildMatrix r c (\(p, r) -> Map.findWithDefault 0 (roots !! r) (monomials (ps !! p)))
+  n  = nullspacePrec 1 m
+  mn = m `aboveWhenNullspace` fromRows n
+  i0 = diagl (replicate r 1) `aboveWhenNullspace` zeros (c-r) r
+  aboveWhenNullspace m m' = case n of [] -> m; _ -> fromBlocks [[m], [m']]
 
 planMultiUpdate :: Spreadsheet -> [CellName] -> Maybe ExecutionPlan
 planMultiUpdate s cs = planMultiUpdate_ (map (\n -> Map.findWithDefault (monomial n 1) n (summary s)) cs)
@@ -176,11 +180,11 @@ setValue name value sheet = unsafeSetRoots newRoots sheet where
 -- available in the spreadsheet, that is, that you've called plantRoots already
 unsafeSetValues :: ExecutionPlan -> [(CellName, Value)] -> Spreadsheet -> Spreadsheet
 unsafeSetValues (roots, transform) outputs sheet = unsafeSetRoots newRootMapping sheet where
-	deltaOutputs   = [v - get (summary sheet Map.! n) (values sheet) | (n, v) <- outputs]
-	deltaRoots     = toList . (transform <>) . fromList $ deltaOutputs
-	oldRoots       = [get (summary sheet Map.! n) (values sheet) | n <- roots]
-	newRoots       = zipWith (+) oldRoots deltaRoots
-	newRootMapping = Map.fromList (zip roots newRoots)
+  deltaOutputs   = [v - get (summary sheet Map.! n) (values sheet) | (n, v) <- outputs]
+  deltaRoots     = toList . (transform <>) . fromList $ deltaOutputs
+  oldRoots       = [get (summary sheet Map.! n) (values sheet) | n <- roots]
+  newRoots       = zipWith (+) oldRoots deltaRoots
+  newRootMapping = Map.fromList (zip roots newRoots)
 
 -- ensure that an execution plan's roots all appear in the spreadsheet
 plantRoots :: ExecutionPlan -> Spreadsheet -> Spreadsheet
@@ -202,9 +206,10 @@ readsWords = mapM noJunk . words where
 setValueLoop s = do
   putStr (pprint s)
   names <- words <$> prompt "Change cells (space-separated): "
-  case planMultiUpdate s names of
-    Nothing   -> putStrLn "Those cells are too closely related." >> setValueLoop s
-    Just plan -> do
+  case (names, planMultiUpdate s names) of
+    ([], _        ) -> putStrLn "You don't want to change anything, and that's fine with me!" >> setValueLoop s
+    (_ , Nothing  ) -> putStrLn "Those cells are too closely related." >> setValueLoop s
+    (_ , Just plan) -> do
       putStrLn $ "Okay, updating " ++ show names ++ " by modifying " ++ show (fst plan) ++ "."
       values_ <- prompt "Change the values to: "
       case readsWords values_ of
