@@ -69,6 +69,9 @@ type ExecutionPlan = ([CellName], Matrix Value)
 -- This works by producing the linear transformation M corresponding to
 -- applying all the polynomials at once, finding a basis N for the null space
 -- of M, and outputting [M; N]^-1 * [I; 0] where I has as many rows as M does.
+-- The implementation below is clumsified a bit by the fact that hmatrix
+-- doesn't handle matrices with zero rows (or zero columns) very gracefully,
+-- but hopefully the idea shines through with a bit of inspection.
 --
 -- TODO: return an Either, with a counterexample showing one of the polynomials
 -- being a linear combination of the others
@@ -78,8 +81,9 @@ planMultiUpdate_ ps = guard (length n == c-r) >> Just (roots, inv mn <> i0) wher
 	(r, c) = (length ps, length roots)
 	m  = buildMatrix r c (\(p, r) -> Map.findWithDefault 0 (roots !! r) (monomials (ps !! p)))
 	n  = nullspacePrec 1 m
-	mn = fromBlocks [[m], [fromRows n]]
-	i0 = fromBlocks [[diagl (replicate r 1)], [zeros (c-r) r]]
+	mn = m `aboveWhenNullspace` fromRows n
+	i0 = diagl (replicate r 1) `aboveWhenNullspace` zeros (c-r) r
+	aboveWhenNullspace m m' = case n of [] -> m; _ -> fromBlocks [[m], [m']]
 
 planMultiUpdate :: Spreadsheet -> [CellName] -> Maybe ExecutionPlan
 planMultiUpdate s cs = planMultiUpdate_ (map (\n -> Map.findWithDefault (monomial n 1) n (summary s)) cs)
@@ -188,7 +192,7 @@ plantRoots (roots, _) sheet = sheet { summary = summary sheet `Map.union` Map.fr
 
 -- safe but possibly inefficient version of unsafeSetValues
 setValues :: ExecutionPlan -> [CellName] -> [Value] -> Spreadsheet -> Spreadsheet
-setValues plan names values = unsafeSetValues plan (zip names values) . plantRoots plan
+setValues plan names values = trace (show (zip names values)) $ unsafeSetValues plan (zip names values) . plantRoots plan
 -- IO {{{1
 
 prompt s = do
@@ -202,9 +206,10 @@ readsWords = mapM noJunk . words where
 setValueLoop s = do
   putStr (pprint s)
   names <- words <$> prompt "Change cells (space-separated): "
-  case planMultiUpdate s names of
-    Nothing   -> putStrLn "Those cells are too closely related." >> setValueLoop s
-    Just plan -> do
+  case (names, planMultiUpdate s names) of
+    ([], _        ) -> putStrLn "You don't want to change anything, and that's fine with me!" >> setValueLoop s
+    (_ , Nothing  ) -> putStrLn "Those cells are too closely related." >> setValueLoop s
+    (_ , Just plan) -> trace (show plan) $ do
       putStrLn $ "Okay, updating " ++ show names ++ " by modifying " ++ show (fst plan) ++ "."
       values_ <- prompt "Change the values to: "
       case readsWords values_ of
