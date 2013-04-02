@@ -36,6 +36,8 @@ User interface specification using an enhanced spreadsheet model: http://smartec
   - Design user interfaces without explicit programming
 A Spreadsheet Algebra for a Direct Data Manipulation Query Interface
   - gives an account of representing relational algebra-like queries visually, showing the output of subexpressions of the query interactively as the query is being built to guide the query writer
+DataLens: Making a Good First Impression
+  - brief description of an algorithm for selecting "representative" tuples (rather than trying to estimate an unknown ranking function and selecting the highest-ranked ones)
 
 Patents
 -------
