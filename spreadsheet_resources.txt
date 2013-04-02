@@ -34,6 +34,8 @@ Forms/3: A first-order visual language to explore the boundaries of the spreadsh
   - there's a lot of details I still don't understand perfectly, but anyway the main ideas are pretty clear and not very relevant: this is primarily still a one-way computational idea
 User interface specification using an enhanced spreadsheet model: http://smartech.gatech.edu/bitstream/handle/1853/3630/93-20.pdf?sequence=1
   - Design user interfaces without explicit programming
+A Spreadsheet Algebra for a Direct Data Manipulation Query Interface
+  - gives an account of representing relational algebra-like queries visually, showing the output of subexpressions of the query interactively as the query is being built to guide the query writer
 
 Patents
 -------
