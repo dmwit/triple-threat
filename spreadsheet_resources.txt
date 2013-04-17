@@ -98,6 +98,10 @@ really a particularly fundamental challenge.
 * Graphical techniques in a spreadsheet for specifying user interfaces: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.18.3001&rep=rep1&type=pdf
   - Use spreadsheets to define constraints, instead of using constraints to define spreadsheets
 * SkyBlue: A Multi-Way Local Propagation Constraint Solver for User Interface Construction: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.32.6479&rep=rep1&type=pdf
+* Expressing multi-way data-flow constraints as a commutative monoid makes many of their properties obvious: http://dl.acm.org/citation.cfm?id=2364399
+  - Expresses multi-way constraint systems as a directed graph where vertices are variables and methods
+  - The monoid doesn't need additional information
+  - Recent paper! (2012)
 
 Distributed Spreadsheets
 ------------------------
