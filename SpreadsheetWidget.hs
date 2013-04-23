@@ -18,21 +18,17 @@ data Widget = Widget
   , methods   :: CellDomain -> Method
   }
 
-inDom :: SpreadsheetValues -> CellDomain -> Bool
-inDom vals dom = Set.isSubsetOf (Map.keysSet vals) dom
-
 restrictDom :: SpreadsheetValues -> CellDomain -> SpreadsheetValues
-restrictDom vals b = Map.intersection vals (Map.fromSet (const ()) b)
+restrictDom vals = Map.intersection vals . Map.fromSet (const ())
+
+safe, dangerous :: DangerZone -> Set CellName -> Bool
+safe = (not .) . dangerous
+dangerous rep s = any (`Set.isSubsetOf` s) (Set.toList rep)
 
 -- Minimize the representation of a danger zone.
--- Recall that representations can be turned into real danger zones via the transformation:
---
--- toZone :: Set (Set CellName) -> (Set CellName -> Bool)
--- toZone rep x = any [x `Set.isSubsetOf` r | r <- Set.toList rep]
---
 -- Given a representation rep, this function attempts to produce a smaller
--- representation rep' such that toZone rep = toZone rep'. At the moment, it
--- does this only by iterating one rule: remove any sets of names which are
+-- representation rep' such that dangerous rep = dangerous rep'. At the moment,
+-- it does this only by iterating one rule: remove any sets of names which are
 -- proper supersets of another set of names in the representation. To be
 -- complete, we would probably also need a rule that said something like "If
 -- all of the sets of names S U {x} for x in the domain of the lens are in the
@@ -49,9 +45,24 @@ compose
   = Widget { domain = dom , invariant = inv , danger = dz , methods = f  } where
   dom      = Set.union domk doml
   inv vals = invk (restrictDom vals domk) && invl (restrictDom vals doml)
+  shared   = domk `Set.intersection` doml
   dz       = minimizeDangerZone (dzk `Set.union` dzl `Set.union` Set.fromList
-                                   [ (vk `Set.union` vl) `Set.difference` (domk `Set.intersection` doml)
+                                   [ (vk `Set.union` vl) `Set.difference` shared
                                    | vk <- Set.toList dzk
                                    , vl <- Set.toList dzl
                                    ])
-  f = undefined
+  f inputs = if canRunKFirst then runKFirst else runLFirst where
+    kIn = Set.intersection inputs domk
+    lIn = Set.intersection inputs doml
+    kInShared = Set.union kIn shared
+    lInShared = Set.union lIn shared
+
+    canRunKFirst   = safe dzk kIn && safe dzl lInShared
+    runKFirst vals = let
+      vals'  = fk kIn (restrictDom vals domk)
+      vals'' = fl lInShared (restrictDom vals' doml `Map.union` restrictDom vals doml)
+      in vals' `Map.union` vals''
+    runLFirst vals = let
+      vals'  = fl lIn (restrictDom vals doml)
+      vals'' = fk kInShared (restrictDom vals' domk `Map.union` restrictDom vals domk)
+      in vals' `Map.union` vals''
