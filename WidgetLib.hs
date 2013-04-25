@@ -90,3 +90,10 @@ divOperator = NumOp (/) (flip (/)) sa sb where
   sb val old new = val * old
 -- c = a / b
 divWidget = numOpWidget divOperator
+
+idWidget a b = Widget
+  { domain    = Set.fromList [a, b]
+  , invariant = \vals -> vals ! a == vals ! b
+  , danger    = Set.fromList [Set.fromList [a, b]]
+  , methods   = \i vals -> if i == Set.fromList [a] then Map.insert b (vals ! a) vals else Map.insert a (vals ! b) vals
+  }
