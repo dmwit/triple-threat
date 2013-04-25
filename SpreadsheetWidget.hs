@@ -34,9 +34,7 @@ dangerous rep s = any (`Set.isSubsetOf` s) (Set.toList rep)
 -- all of the sets of names S U {x} for x in the domain of the lens are in the
 -- representation, replace them with the single set S.". We don't try to do
 -- that yet.
---
--- TODO: in fact, we don't even do the easy rule yet!
-minimizeDangerZone x = x
+minimizeDangerZone x = Set.filter (\s -> and [not (Set.isProperSubsetOf s' s) | s' <- Set.toList x]) x
 
 compose :: Widget -> Widget -> Widget
 compose
