@@ -67,7 +67,7 @@ instance PPrint InOp where
   pprint Times = "*"
   pprint Div   = "/"
   pprint Pow   = "^"
-  
+
 instance PPrint PreOp where
   pprint Min   = "min"
   pprint Max   = "max"
@@ -93,9 +93,9 @@ instance Parseable InOp where
     , "-" --> Minus
     , "*" --> Times
     , "/" --> Div
-    , "^" --> Pow  
+    , "^" --> Pow
     ] where s --> o = string s >> return o
-            
+
 instance Parseable PreOp where
   parser = choice
     [ "min" --> Min
@@ -105,7 +105,7 @@ instance Parseable PreOp where
 
 instance Parseable Formula where
   parser = chainl1 (parens <|> cell) (BinOp . Infix <$> parser) <|> prefix_exp where
-    prefix_exp = BinOp . Prefix <$> parser <* string "(" <*> parser  <* string "," <*> parser <* string ")" 
+    prefix_exp = BinOp . Prefix <$> parser <* string "(" <*> parser <* string "," <*> parser <* string ")"
     cell   = string "<" *> (Cell <$> parseCellName) <* string ">"
     parens = string "(" *> parser <* string ")"
 
