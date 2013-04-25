@@ -11,7 +11,7 @@ module SpreadsheetCommon
 
 import Control.Applicative
 import Control.Monad
-import Data.List
+import Data.List hiding (lookup)
 import Data.Map
 import qualified Data.Set as Set
 import Text.Parsec hiding (many, optional, (<|>))
