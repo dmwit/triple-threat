@@ -1,6 +1,6 @@
 module WidgetLib where
 
-import Data.Default
+--import Data.Default
 import Data.Map hiding (map)
 import Data.Maybe
 import Data.Set (Set)
@@ -38,9 +38,9 @@ numOpMethods (NumOp { binop = bop, negop = nop, scalea = sa, scaleb = sb})
     bNew = sb bIn cComputed cIn
 
 -- c = a op b
-numOpWidget :: NumOperator -> CellName -> CellName -> CellName -> Widget
+numOpWidget :: NumOperator -> CellName -> CellName -> CellName -> GenWidget
 numOpWidget o c a b = answer where
-  answer = Widget
+  answer = GenWidget
     { domain    = Set.fromList [a,b,c]
     , invariant = \vals -> fromMaybe False $ do
         [va, vb, vc] <- mapM (`lookup` vals) [a, b, c]
@@ -60,7 +60,7 @@ plusOperator = NumOp (+) (-) s s where
   s val old new = scaleLin val old new (new / 2)
 
 -- c = a + b
-plusWidget :: CellName -> CellName -> CellName -> Widget
+plusWidget :: CellName -> CellName -> CellName -> GenWidget
 plusWidget = numOpWidget plusOperator
 
 minusOperator :: NumOperator
@@ -70,7 +70,7 @@ minusOperator = NumOp (-) (+) sa sb where
   sb val old new = scaleLin val old new 0
 
 -- c = a - b
-minusWidget :: CellName -> CellName -> CellName -> Widget
+minusWidget :: CellName -> CellName -> CellName -> GenWidget
 minusWidget = numOpWidget minusOperator
 
 
@@ -91,9 +91,11 @@ divOperator = NumOp (/) (flip (/)) sa sb where
 -- c = a / b
 divWidget = numOpWidget divOperator
 
-idWidget a b = Widget
+idWidget a b = GenWidget
   { domain    = Set.fromList [a, b]
   , invariant = \vals -> vals ! a == vals ! b
   , danger    = Set.fromList [Set.fromList [a, b]]
   , methods   = \i vals -> if i == Set.fromList [a] then Map.insert b (vals ! a) vals else Map.insert a (vals ! b) vals
   }
+
+

@@ -54,7 +54,7 @@ instance PPrint SpreadsheetValues where
   pprint m = unlines [cellName ++ " = " ++ pprint value   | (cellName, value  ) <- assocs m]
 
 instance PPrint Value where pprint = show
-instance PPrint [CellName] where pprint cells = intercalate ", " cells
+instance PPrint [CellName] where pprint cells = intercalate " " cells
 
 instance PPrint Formula where
   pprint (Cell s) = "<" ++ s ++ ">"
@@ -77,8 +77,20 @@ instance PPrint DependencyGraph where
 
 instance PPrint (Set.Set CellName) where
   pprint s = pprint (Set.elems s)
+  
 
------------------------------------------------------------------
+instance PPrint (Set.Set (Set.Set CellName)) where
+  pprint s = intercalate ", " $ Data.List.map pprint (Set.elems s)
+  
+  
+instance PPrint Equation where
+  pprint (Equation name f) = name ++ " = " ++ pprint f
+  
+instance PPrint (Set.Set Equation) where
+  pprint s = intercalate "; " $ Data.List.map pprint (Set.elems s)
+
+
+ -----------------------------------------------------------------
 ---------------------------- Parser -----------------------------
 
 parseCellName = many1 (noneOf " >")
