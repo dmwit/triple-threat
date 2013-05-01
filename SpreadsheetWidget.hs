@@ -1,59 +1,55 @@
+{-# LANGUAGE FlexibleInstances #-}
 module SpreadsheetWidget where
 
 import SpreadsheetCommon
+import GetPut
 import Data.Map (Map)
 import Data.Set (Set)
+import System.Environment
+import System.IO
 
+import Control.Applicative
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.List as List
 import qualified Data.Maybe as Maybe
+import Text.Parsec hiding (many, optional, (<|>))
 
 type CellDomain = Set CellName
 type DangerZone = Set CellDomain
 type Method     = SpreadsheetValues -> SpreadsheetValues
 
-data GenWidget = GenWidget
+data Widget = Widget
   { domain    :: CellDomain
   , invariant :: SpreadsheetValues -> Bool
   , danger    :: DangerZone
   , methods   :: CellDomain -> Method
   }
   
+
 -- Can also add inequalities at a later date
-data Relation = Eq Formula Formula | Conjunction Conj Relation Relation
-  deriving (Eq, Ord, Show, Read)
-data Conj = And | Or
+data Relation = Eq Formula Formula | And Relation Relation
   deriving (Eq, Ord, Show, Read)
   
--- Define widgets in terms of equations and relations we can read,
+-- Define RelationWidgets in terms of equations and relations we can read,
 -- then translate them into methods and invariants
-data Widget = Widget
+data RelationWidget = RelationWidget
   { relation  :: Relation
   , equations :: Map CellDomain (Set Equation)
+  , dangerZone:: DangerZone
   }
   
-getDomain :: Widget -> CellDomain 
-getDomain w = Set.unions $ Map.keys (equations w)
 
-getInvariant :: Relation -> SpreadsheetValues -> Bool
-getInvariant (Eq f1 f2) vals = 
-  let mv1 = cell_get_maybe f1 vals in
-  let mv2 = cell_get_maybe f2 vals in
-  Maybe.fromMaybe False $ liftM2 (==) mv1 mv2
-  
-cell_get_maybe :: Formula -> SpreadsheetValues -> Maybe Value
-cell_get_maybe (Cell new_name) values = Map.lookup new_name values
-cell_get_maybe (BinOp o f1 f2) values = liftM2 (op o) (cell_get_maybe f1 values) (cell_get_maybe f2 values)
-  
 -----------------------------------------------------------------
 ------------------- Pretty Printer ------------------------------
   
 instance PPrint Relation where
   pprint (Eq f1 f2) = pprint f1 ++ " = " ++ pprint f2
-  pprint (Conjunction And r1 r2) = pprint r1 ++ " /\\ " ++ pprint r2 
-  pprint (Conjunction Or  r1 r2) = pprint r1 ++ " \\/ " ++ pprint r2
+  pprint (And r1 r2) = pprint r1 ++ " /\\ " ++ pprint r2 
   
+
+printEqns m = unlines [pprint dom ++ " : " ++ pprint eq_set | (dom, eq_set) <- Map.assocs m]
+
 --instance PPrint (Map CellDomain (Set Equation)) where
 --  pprint m = unlines [ pprint dom ++ " : " ++ pprint eq_set | (dom, eq_set) <- Map.assocs m]
   
@@ -80,11 +76,11 @@ dangerous rep s = any (`Set.isSubsetOf` s) (Set.toList rep)
 -- that yet.
 minimizeDangerZone x = Set.filter (\s -> and [not (Set.isProperSubsetOf s' s) | s' <- Set.toList x]) x
 
-compose :: GenWidget -> GenWidget -> GenWidget
+compose :: Widget -> Widget -> Widget
 compose
-  ( GenWidget { domain = domk, invariant = invk, danger = dzk, methods = fk })
-  ( GenWidget { domain = doml, invariant = invl, danger = dzl, methods = fl })
-  = GenWidget { domain = dom , invariant = inv , danger = dz , methods = f  } where
+  ( Widget { domain = domk, invariant = invk, danger = dzk, methods = fk })
+  ( Widget { domain = doml, invariant = invl, danger = dzl, methods = fl })
+  = Widget { domain = dom , invariant = inv , danger = dz , methods = f  } where
   dom      = Set.union domk doml
   inv vals = invk (restrictDom vals domk) && invl (restrictDom vals doml)
   shared   = domk `Set.intersection` doml
@@ -109,3 +105,118 @@ compose
       vals'' = fk kInShared (restrictDom vals' domk `Map.union` restrictDom vals domk)
       in vals' `Map.union` vals''
 
+
+-------------------------------------------------------------------------
+--------------------------------- Step ----------------------------------
+
+step :: Widget -> SpreadsheetValues -> SpreadsheetValues -> SpreadsheetValues
+step (Widget { domain = dom , invariant = inv , danger = dz , methods = f  }) 
+     vals input =
+  let i = Map.keysSet input in
+  if dangerous dz i
+  then vals 
+  else 
+    let vals' = Map.union input vals in
+    f i vals'
+    
+
+-----------------------------------------------------------------
+--------------------- RelationWidget to Widgets -----------------
+  
+getDomain :: RelationWidget -> CellDomain 
+getDomain w = Set.unions $ Map.keys (equations w)
+
+getInvariant :: Relation -> SpreadsheetValues -> Bool
+getInvariant (Eq f1 f2) vals = 
+  let mv1 = cell_get_maybe f1 vals in
+  let mv2 = cell_get_maybe f2 vals in
+  Maybe.fromMaybe False $ liftM2 (==) mv1 mv2
+  
+getEquationMethod :: Equation -> Method
+getEquationMethod (Equation target (Cell name)) = -- let target = name
+  \ vals -> Map.alter (\ _ -> Map.lookup name vals) target vals
+getEquationMethod (Equation target f) = -- let target = f
+  \ vals -> cell_put f (Map.lookup target vals) vals
+            
+getMethods :: Map CellDomain (Set Equation) -> CellDomain -> Method
+getMethods eqns dom = 
+  let dom_eqns = Maybe.fromMaybe Set.empty $ Map.lookup dom eqns in
+  Set.fold f id dom_eqns where
+    f eq m = \ vals -> getEquationMethod eq (m vals)
+
+
+getWidget :: RelationWidget -> Widget
+getWidget w = Widget { domain = dom , invariant = inv , danger = dz , methods = f  } where
+  dom = getDomain w 
+  inv = getInvariant $ relation w 
+  dz  = dangerZone w
+  f   = getMethods $ equations w
+
+
+
+-------------------------------------------------------------------------
+------------------------------ Parser -----------------------------------
+    
+instance Parseable RelationWidget where
+  parser = do
+    rel <- parser -- relation
+    string "\n"
+    dz <- parser -- danger zone
+    string "\n"
+    eqns <- parser -- equations
+    return (RelationWidget { relation = rel, dangerZone = dz, equations = eqns })
+    
+instance Parseable Widget where
+  parser = getWidget <$> parser -- RelationWidget
+    
+        
+instance Parseable Relation where
+  parser = do
+    f1 <- parser -- formula
+    string " = " 
+    f2 <- parser -- formula
+    return (Eq f1 f2)
+    
+    
+instance Parseable DangerZone where
+  parser = munge <$> many (optional parser <* ( string ", " <|> string "\n" )) where -- parser here : CellDomain
+    munge xs = Set.fromList [ x | Just x <- xs ]
+  
+instance Parseable  (Map CellDomain (Set Equation)) where
+  parser = munge <$> many (optional parser <* string "\n") where
+    munge xs = Map.fromList [(i,e) | Just(i,e) <- xs]
+    
+instance Parseable (CellDomain,Set Equation) where
+  parser = do
+    i <- parser -- CellDomain
+    string " : " 
+    ls <- many (optional parser <* (string ", " <|> string "\n"))  -- parser here : Equation
+    let munge xs = Set.fromList [ x | Just x <- xs ] in
+      return (i, munge ls)
+    
+instance Parseable CellDomain where
+  parser = munge <$> many (optional parseCellName <* string " ") where
+    munge xs = Set.fromList [ x | Just x <- xs ]
+    
+prompt s = do
+  putStr s
+  hFlush stdout
+  getLine
+    
+setValueLoop w s = do
+  putStrLn (pprint s)
+  cellName <- prompt "Change cell: "
+  cellValue <- prompt "Change value to: "
+  case reads cellValue of
+    [(v,"")] -> setValueLoop w (step w s (Map.fromList [(cellName,v)]))
+    _ -> putStrLn "That doesn't look like a number to me!" >> setValueLoop w s
+  
+main = do
+  a <- getArgs
+  case a of
+    [fileName] -> do
+      s <- readFile fileName
+      case parse parser fileName s of
+        Left err -> print err
+        Right eqs -> setValueLoop eqs Map.empty
+    _ -> putStrLn "Call with one argument naming a file with a relation, a danger zone, some methods."

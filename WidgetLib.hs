@@ -8,9 +8,20 @@ import Prelude hiding (lookup)
 import SpreadsheetCommon
 import SpreadsheetWidget
 
+
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import qualified Data.Maybe as Maybe
+import qualified Data.List as List
 import qualified Control.Monad as M
+
+
+
+  
+  
+
+
+--------------------------------------------------------------------------
 
 data NumOperator = NumOp
   { binop :: Value -> Value -> Value
@@ -38,9 +49,9 @@ numOpMethods (NumOp { binop = bop, negop = nop, scalea = sa, scaleb = sb})
     bNew = sb bIn cComputed cIn
 
 -- c = a op b
-numOpWidget :: NumOperator -> CellName -> CellName -> CellName -> GenWidget
+numOpWidget :: NumOperator -> CellName -> CellName -> CellName -> Widget
 numOpWidget o c a b = answer where
-  answer = GenWidget
+  answer = Widget
     { domain    = Set.fromList [a,b,c]
     , invariant = \vals -> fromMaybe False $ do
         [va, vb, vc] <- mapM (`lookup` vals) [a, b, c]
@@ -60,7 +71,7 @@ plusOperator = NumOp (+) (-) s s where
   s val old new = scaleLin val old new (new / 2)
 
 -- c = a + b
-plusWidget :: CellName -> CellName -> CellName -> GenWidget
+plusWidget :: CellName -> CellName -> CellName -> Widget
 plusWidget = numOpWidget plusOperator
 
 minusOperator :: NumOperator
@@ -70,7 +81,7 @@ minusOperator = NumOp (-) (+) sa sb where
   sb val old new = scaleLin val old new 0
 
 -- c = a - b
-minusWidget :: CellName -> CellName -> CellName -> GenWidget
+minusWidget :: CellName -> CellName -> CellName -> Widget
 minusWidget = numOpWidget minusOperator
 
 
@@ -91,7 +102,7 @@ divOperator = NumOp (/) (flip (/)) sa sb where
 -- c = a / b
 divWidget = numOpWidget divOperator
 
-idWidget a b = GenWidget
+idWidget a b = Widget
   { domain    = Set.fromList [a, b]
   , invariant = \vals -> vals ! a == vals ! b
   , danger    = Set.fromList [Set.fromList [a, b]]
