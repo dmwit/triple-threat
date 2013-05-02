@@ -1,0 +1,183 @@
+\documentclass{article}
+\usepackage{amsmath}
+\newcommand{\lens}{\leftrightarrow}
+\newcommand{\slens}{\lens_s}
+\begin{document}
+The goal is to take the theme ``bidirectional spreadsheet'' and run with it.
+In particular we'd like to design something that would be helpful to
+business people---who are familiar with normal unidirectional
+spreadsheets---when they realize that a particular computation hasn't come
+out the way they wanted it to, and are trying to figure out a way to guide
+their business so that it comes out that way in the future.
+
+(TODO: give a running example, so the drawbacks outlined in later sections
+don't come as a surprise)
+
+\section{Literal Interpretation}
+One basic design idea is to simply describe the connections between cells
+(called ``formulas'' in traditional spreadsheets) via a lens rather than a
+one-way function. We can do this whenever:
+
+\begin{enumerate}
+    \item We know how to turn a particular math operator into a lens, that
+        is, there's a ``good'' interpretation of inverting the operation.
+    \item The formulas refer to each other in simple enough ways that we
+        can use the monoidal structure of the category of lenses without
+        relying on traced or cartesian structure (since we don't have
+        those).
+\end{enumerate}
+
+In fact, when these conditions are satisfied, the lens laws tell us that
+there is a \emph{unique} update to the spreadsheet induced by the lenses'
+get and put functions.
+
+To be specific, the second condition above can be formalized in the
+following way. We identify a set $C$ of cell names, a set $T$ of types, and
+a finite partial map $f \in C \to T$ giving the type of data stored in each
+cell. We say a lens has spreadsheet-type $c_1 \times \cdots \times c_n
+\slens c$ when $c, c_1, \ldots, c_n$ are pairwise distinct and the lens has
+lens type $f(c_1) \times \cdots \times f(c_n) \lens f(c)$. Given a
+collection of lenses and corresponding spreadsheet types, we can create a
+directed graph whose nodes are $C$ and where there is an edge $(c,c')$ for
+each lens whose type has the form $c_1 \times \cdots \times c' \times \cdots
+c_n \slens c$. We say a collection of lenses has \emph{simple structure}
+when there is at most one \emph{undirected} path between any pair of nodes.
+
+This is a fairly restrictive structural restriction, but note that it does
+allow two (possibly surprising) setups: first, a given cell can have
+multiple formulas associated with it, provided that they depend on disjoint
+cell sets; second, multiple formulas can depend on a single cell, provided
+the cells they output to are depended on by disjoint cell sets.
+
+Suppose we now change the value in cell $c$. Pseudocode to update the rest
+of the spreadsheet looks like this:
+
+\newcommand\assign{\mathop{:=}}
+\newcommand\modified{\mathit{modified}}
+\newcommand\domain{\mathit{domain}}
+\newcommand\codomain{\mathit{codomain}}
+\begin{tabular}{l}
+$\modified\assign\{c\}$ \\
+iterate to fixpoint: \\
+\qquad $k \assign $(nondeterministically) any lens \\
+\qquad $f \assign $(nondeterministically) get or put \\
+\qquad reject the choice when we would overwrite old work, i.e. when: \\
+\qquad\qquad $k.f.\domain \cap \modified = \emptyset$ and $k.f.\codomain \cap \modified \ne \emptyset$ \\
+\qquad run $k.f$ \\
+\qquad $\modified \assign \modified \cup k.f.\codomain$
+\end{tabular}
+
+One should immediately ask whether this definition is really good, that is,
+whether it terminates and is convergent. Showing these things relies
+critically on the simple structure property, which gives us the crucial fact
+that each cell changes its value at most once (in exactly the iteration
+where it is added to the $\modified$ set).
+
+(TODO: write down this argument carefully)
+
+\newcommand{\tax}{\mathit{tax}}
+\newcommand{\base}{\mathit{base}}
+\newcommand{\total}{\mathit{total}}
+The approach outlined above is simple to describe and implement, and it
+reuses a lot of domain knowledge we have built up about lenses, but its
+restrictions are strong enough that even fairly reasonable-looking
+spreadsheets are excluded. For example, consider a spreadsheet with just
+three cells named ``base'', ``tax'', and ``total''. We could imagine writing
+a lens between base and tax that preserves the formula
+$\tax=0.08*\base$, and similarly a lens between base, tax, and total
+that preserves the formula $\total=\base+\tax$. However, the structure
+restriction above is not satisfied in this spreadsheet: there are two paths
+in the dependency graph from total to base (one that goes through tax and
+one that doesn't).
+
+Additionally, it isn't clear how to handle multi-update (that is, setting
+the values of several cells simultaneously) or constrained update (that is,
+fixing the values of some cells during the update process). The next two
+sections discuss ways to address these shortcomings.
+
+\section{Linear Algebra}
+Consider again the simple three-cell spreadsheet with two equations:
+\begin{align*}
+    \tax &= 0.08*\base \\
+    \total &= \base+\tax
+\end{align*}
+We might observe that the $\total$ equation could be rewritten in terms of
+just $\base$:
+\begin{align*}
+    \tax   &= 0.08*\base \\
+    \total &= 1.08*\base
+\end{align*}
+The lenses implementing these two equations \emph{do} have the simple
+structure property. One may wonder in exactly which circumstances such a
+refactoring can be done -- and whether it could be done automatically. In
+the following, we suggest one circumstance in which we can do quite well in
+that direction.
+
+Suppose for the moment that each lens' get is a linear function, and that
+the dependency graph is acyclic. (Being acyclic is a significant relaxation
+from the simple structure property, but being linear functions is a
+significant strengthening of the ``any lens will do'' attitude from the
+previous approach.) Call a cell a ``root cell'' if it has no out edges --
+that is, none of the linear formulas in the spreadsheet output to root
+cells. A simple argument shows that, given a cell in the spreadsheet, we
+can write a linear formula which maps the values of root cells to the value
+of the given cell. The argument goes by induction on the length of the
+longest path from a root cell to the given one, and proceeds as in the
+example above by substituting in linear formulas for each non-root variable
+at each step. In fact, we can go a step farther: we can write linear
+transformations from root cells to any set of cells. If we manage to give a
+characterization of when these linear transformations can be
+bidirectionalized, then we will have given an account of how to handle the
+multi-update problem and relax the simple structure requirement in the parts
+of the spreadsheet where only linear formulae are used.
+
+Thus, we can now frame our problem in another way: what is the right way to
+bidirectionalize a linear transformation? Accordingly, we will now step away
+from spreadsheets and frame our discussion in linear algebra terms.
+
+(old text:)
+This gives us a way to update non-root cells when any root cell changes. We
+now ask: how should we update root cells when a non-root cell changes? Let
+us return to the example for a moment, but add cells for several kinds of
+products.  The original spreadsheet looks like this:
+\begin{align*}
+    \tax_i &= 0.08*\base_i \\
+    \total_i &= \base_i+\tax_i \\
+    \total &= \sum_{i}\total_i
+\end{align*}
+We compute the following linear functions in terms of the root cells
+$\base_i$:
+\begin{align*}
+    \total_i &= 1.08*\base_i \\
+    \total &= \sum_i 1.08*\base_i
+\end{align*}
+Now we set the $\total$. Because $\total$ depends on many root cells, there
+are many updates to choose from: we could push all of the change into, say,
+$\base_0$, keeping all the others the same; or spread the change evenly; or
+many other strategies. In the following, we will choose the following
+desiderata: we wish to find the change to the root cells which minimizes the
+L2-norm.
+
+(TODO: show how to solve the multi-update problem ``optimally'')
+
+Pending research:
+\begin{itemize}
+    \item How do we solve constrained update ``optimally''?
+    \item Can we generalize these observations? (What operations did we
+        really need above? Can we be polymorphic over a theory that offers
+        these operations? Are there other known instantiations of that
+        theory?)
+\end{itemize}
+\section{Multiway Lenses}
+(TODO: motivate multiway lenses (why did we move to these?); give
+definition; show id and ``composition''; mention properties of composition;
+perhaps define a few others?)
+
+Pending research:
+\begin{itemize}
+    \item more syntax and a big example
+    \item other ideas we can take from process calculi? (e.g. name hiding,
+        two different kinds of composition, etc.)
+    \item types
+\end{itemize}
+\end{document}
