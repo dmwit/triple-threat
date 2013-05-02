@@ -182,17 +182,20 @@ instance Parseable DangerZone where
   parser = munge <$> many (optional parser <* ( string ", " <|> string "\n" )) where -- parser here : CellDomain
     munge xs = Set.fromList [ x | Just x <- xs ]
   
-instance Parseable  (Map CellDomain (Set Equation)) where
-  parser = munge <$> many (optional parser <* string "\n") where
+instance Parseable (Map CellDomain (Set Equation)) where
+  parser = munge <$> many (optional parser <* string "\n") where -- parser here: (CellDomain, Set Equation)
     munge xs = Map.fromList [(i,e) | Just(i,e) <- xs]
     
+instance Parseable (Set Equation) where
+  parser = munge <$> many (optional parser <* (string ", " <|> string "\n")) where -- parser here : Equation
+    munge xs = Set.fromList [ x | Just x <- xs ]
+    
 instance Parseable (CellDomain,Set Equation) where
-  parser = do
-    i <- parser -- CellDomain
-    string " : " 
-    ls <- many (optional parser <* (string ", " <|> string "\n"))  -- parser here : Equation
-    let munge xs = Set.fromList [ x | Just x <- xs ] in
-      return (i, munge ls)
+  parser = do 
+    i <- parser -- CellDomain 
+    string " : "
+    e <- parser -- Set Equation
+    return (i,e)
     
 instance Parseable CellDomain where
   parser = munge <$> many (optional parseCellName <* string " ") where
