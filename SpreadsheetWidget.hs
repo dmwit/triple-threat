@@ -39,6 +39,14 @@ data RelationWidget = RelationWidget
   , dangerZone:: DangerZone
   }
   
+  
+-- default, identity widget which matches with everything
+defaultWidget :: Widget
+defaultWidget = Widget { domain = dom, invariant = inv, danger = dz, methods = m } where
+  dom = Set.empty
+  inv = \ _ -> True
+  dz  = Set.empty
+  m   = \ _ -> id
 
 -----------------------------------------------------------------
 ------------------- Pretty Printer ------------------------------
@@ -48,11 +56,20 @@ instance PPrint Relation where
   pprint (And r1 r2) = pprint r1 ++ " /\\ " ++ pprint r2 
   
 
-printEqns m = unlines [pprint dom ++ " : " ++ pprint eq_set | (dom, eq_set) <- Map.assocs m]
+instance PPrint (Map CellDomain (Set Equation)) where
+  pprint m = unlines [pprint dom ++ " : " ++ pprint set_eq | (dom, set_eq) <- Map.assocs m]
 
---instance PPrint (Map CellDomain (Set Equation)) where
---  pprint m = unlines [ pprint dom ++ " : " ++ pprint eq_set | (dom, eq_set) <- Map.assocs m]
+
+instance PPrint RelationWidget where
+  pprint w = 
+    pprint (relation w) ++ "\n" ++ pprint (dangerZone w) ++ "\n" ++ pprint (equations w)
   
+instance PPrint [RelationWidget] where  
+  pprint ls = intercalate "--\n" (map pprint ls)
+
+instance PPrint Bool where
+  pprint True = "True"
+  pprint False = "False"
 
 -------------------------------------------------------------------------
 ----------------------------- Composition -------------------------------
@@ -132,17 +149,13 @@ getInvariant (Eq f1 f2) vals =
   let mv2 = cell_get_maybe f2 vals in
   Maybe.fromMaybe False $ liftM2 (==) mv1 mv2
   
-getEquationMethod :: Equation -> Method
-getEquationMethod (Equation target (Cell name)) = -- let target = name
-  \ vals -> Map.alter (\ _ -> Map.lookup name vals) target vals
-getEquationMethod (Equation target f) = -- let target = f
-  \ vals -> cell_put f (Map.lookup target vals) vals
-            
 getMethods :: Map CellDomain (Set Equation) -> CellDomain -> Method
-getMethods eqns dom = 
+getMethods eqns dom vals = 
   let dom_eqns = Maybe.fromMaybe Set.empty $ Map.lookup dom eqns in
-  Set.fold f id dom_eqns where
-    f eq m = \ vals -> getEquationMethod eq (m vals)
+  let new_vals = Set.fold g Map.empty dom_eqns where
+        g (Equation target f) new = Map.insert target (cell_get f vals) new
+  in
+   Map.union new_vals vals
 
 
 getWidget :: RelationWidget -> Widget
@@ -164,11 +177,14 @@ instance Parseable RelationWidget where
     dz <- parser -- danger zone
     string "\n"
     eqns <- parser -- equations
+    string "!\n"
     return (RelationWidget { relation = rel, dangerZone = dz, equations = eqns })
+    
+instance Parseable [RelationWidget] where
+  parser = sepBy parser (string "---\n") -- RelationWidget
     
 instance Parseable Widget where
   parser = getWidget <$> parser -- RelationWidget
-    
         
 instance Parseable Relation where
   parser = do
@@ -179,40 +195,52 @@ instance Parseable Relation where
     
     
 instance Parseable DangerZone where
-  parser = munge <$> many (optional parser <* ( string ", " <|> string "\n" )) where -- parser here : CellDomain
-    munge xs = Set.fromList [ x | Just x <- xs ]
+  parser = Set.fromList <$> sepBy parser (string ", ") -- CellDomain
   
 instance Parseable (Map CellDomain (Set Equation)) where
-  parser = munge <$> many (optional parser <* string "\n") where -- parser here: (CellDomain, Set Equation)
-    munge xs = Map.fromList [(i,e) | Just(i,e) <- xs]
+  parser = do
+    l <- sepBy parser (string "#\n") -- (CellDomain, Set Equation)
+    return (Map.fromList l)
     
 instance Parseable (Set Equation) where
-  parser = munge <$> many (optional parser <* (string ", " <|> string "\n")) where -- parser here : Equation
-    munge xs = Set.fromList [ x | Just x <- xs ]
+  parser = Set.fromList <$> sepBy parser (string ", ") -- parser here: Equation
     
 instance Parseable (CellDomain,Set Equation) where
-  parser = do 
+  parser = do
     i <- parser -- CellDomain 
-    string " : "
-    e <- parser -- Set Equation
+    string ": "
+    e <- parser -- Set Equation 
     return (i,e)
     
 instance Parseable CellDomain where
-  parser = munge <$> many (optional parseCellName <* string " ") where
-    munge xs = Set.fromList [ x | Just x <- xs ]
+  parser = Set.fromList <$> sepBy parseCellName (string " ")
     
 prompt s = do
   putStr s
   hFlush stdout
   getLine
+  
+readsWords = mapM noJunk . words where
+  noJunk s = [v | (v, "") <- reads s]
     
 setValueLoop w s = do
   putStrLn (pprint s)
-  cellName <- prompt "Change cell: "
-  cellValue <- prompt "Change value to: "
-  case reads cellValue of
-    [(v,"")] -> setValueLoop w (step w s (Map.fromList [(cellName,v)]))
-    _ -> putStrLn "That doesn't look like a number to me!" >> setValueLoop w s
+  putStrLn ("Satisfies Invariant: " ++ (pprint $ invariant w s) ++ "\n")
+  cellNames <- words <$> prompt "Change cells: "
+  case cellNames of
+    [] -> setValueLoop w (step w s Map.empty)
+    _  -> 
+      if dangerous (danger w) (Set.fromList cellNames)
+      then putStrLn "That domain is dangerous!" >> setValueLoop w s
+      else do
+           cellValues <- prompt "Change values to: "
+           case readsWords cellValues of
+             [] -> putStrLn "That didn't look like numbers to me!" >> setValueLoop w s
+             cellValues:_
+               | length cellValues /= length cellNames -> 
+                 putStrLn "Please give as many values as you gave names." >> setValueLoop w s
+               | otherwise -> setValueLoop w (step w s (Map.fromList (zip cellNames cellValues)))
+
   
 main = do
   a <- getArgs
@@ -221,5 +249,10 @@ main = do
       s <- readFile fileName
       case parse parser fileName s of
         Left err -> print err
-        Right eqs -> setValueLoop eqs Map.empty
+        Right s -> -- set of relation widgets 
+          let w = foldl g defaultWidget s where
+                g w rw = compose w (getWidget rw)
+          in do 
+            putStrLn (pprint s)
+            setValueLoop w Map.empty
     _ -> putStrLn "Call with one argument naming a file with a relation, a danger zone, some methods."

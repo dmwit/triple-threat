@@ -93,7 +93,7 @@ instance PPrint (Set.Set Equation) where
  -----------------------------------------------------------------
 ---------------------------- Parser -----------------------------
 
-parseCellName = many1 (noneOf " >")
+parseCellName = many1 alphaNum -- many1 (noneOf " >,")
 parseConst    = many1 (noneOf "#")
 
 class Parseable a where
