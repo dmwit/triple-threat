@@ -63,6 +63,9 @@ instance PPrint (Map CellDomain (Set Equation)) where
 instance PPrint RelationWidget where
   pprint w = 
     pprint (relation w) ++ "\n" ++ pprint (dangerZone w) ++ "\n" ++ pprint (equations w)
+
+instance PPrint [Relation] where
+  pprint ls = unlines (map pprint ls)
   
 instance PPrint [RelationWidget] where  
   pprint ls = intercalate "--\n" (map pprint ls)
@@ -151,11 +154,17 @@ getInvariant (Eq f1 f2) vals =
   
 getMethods :: Map CellDomain (Set Equation) -> CellDomain -> Method
 getMethods eqns dom vals = 
+  -- instantiate the undefined variables in vals to 0
+  let vals' = Map.union vals dom_vals where
+        dom_vals = Map.fromList (zip (Set.elems dom) zeros)
+        zeros = 0 : zeros
+  in
+  -- input equations to update domain variables
   let dom_eqns = Maybe.fromMaybe Set.empty $ Map.lookup dom eqns in
   let new_vals = Set.fold g Map.empty dom_eqns where
-        g (Equation target f) new = Map.insert target (cell_get f vals) new
+        g (Equation target f) new = Map.insert target (cell_get f vals') new
   in
-   Map.union new_vals vals
+   Map.union new_vals vals'
 
 
 getWidget :: RelationWidget -> Widget
@@ -180,6 +189,9 @@ instance Parseable RelationWidget where
     string "!\n"
     return (RelationWidget { relation = rel, dangerZone = dz, equations = eqns })
     
+instance Parseable [Relation] where
+  parser = sepBy parser (string ", ")
+
 instance Parseable [RelationWidget] where
   parser = sepBy parser (string "---\n") -- RelationWidget
     
@@ -192,7 +204,7 @@ instance Parseable Relation where
     string " = " 
     f2 <- parser -- formula
     return (Eq f1 f2)
-    
+  
     
 instance Parseable DangerZone where
   parser = Set.fromList <$> sepBy parser (string ", ") -- CellDomain
@@ -255,4 +267,4 @@ main = do
           in do 
             putStrLn (pprint s)
             setValueLoop w Map.empty
-    _ -> putStrLn "Call with one argument naming a file with a relation, a danger zone, some methods."
+    _ -> putStrLn "Call with one argument naming a file with some relations, danger zones, methods."
