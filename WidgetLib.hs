@@ -73,88 +73,109 @@ idWidget a b =
     eq  = Map.fromList [(Set.empty, Set.singleton eq0),
                         (Set.fromList [a], Set.singleton eqa),
                         (Set.fromList [b], Set.singleton eq0)]
-                 
+           
 
-data NumOperator = NumOp
-  { binop :: Value -> Value -> Value
-  , negop :: Value -> Value -> Value
-    -- scale takes a value, a new and an old value of the updated elt
-  , scalea :: Value -> Value -> Value -> Value
-  , scaleb :: Value -> Value -> Value -> Value
-  }
-
-numOpMethods :: NumOperator -> CellName -> CellName -> CellName ->
+opMethods :: Op -> CellName -> CellName -> CellName -> 
              DangerZone -> CellDomain -> Method
-numOpMethods (NumOp { binop = bop, negop = nop, scalea = sa, scaleb = sb})
-          cName aName bName dz i vals
-  | dangerous dz i = vals -- dz == [a,b,c]
+opMethods (Infix Plus) = plusMethods
+opMethods (Infix Minus) = minusMethods
+opMethods (Infix Times) = timesMethods
+opMethods (Infix Div) = divMethods
+    
+opWidget :: Op -> CellName -> CellName -> CellName -> Widget
+opWidget o c a b =
+  Widget { domain = dom, invariant = inv, danger = dz, methods = m } where
+    dom = Set.fromList [a,b,c]
+    inv = \vals -> fromMaybe False $ do
+      [va,vb,vc] <- mapM (`lookup` vals) [a, b, c]
+      return (va + vb == vc)
+    dz = Set.singleton dom
+    m = opMethods o c a b dz
+    
+plusWidget = opWidget (Infix Plus) 
+minusWidget = opWidget (Infix Minus)
+timesWidget = opWidget (Infix Times)
+divWidget = opWidget (Infix Div)
+
+-------------------------------------------------------------
+
+plusMethods :: CellName -> CellName -> CellName -> 
+               DangerZone -> CellDomain -> Method
+plusMethods cName aName bName dz i vals
+  | dangerous dz i = vals
   | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
   | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
   | i == Set.fromList [cName]       = Map.insert aName aNew . Map.insert bName bNew $ vals
   | otherwise                       = Map.insert cName cComputed vals
   where
-    aIn = Maybe.fromMaybe 0 (Map.lookup aName vals)
-    bIn = Maybe.fromMaybe 0 (Map.lookup bName vals)
-    cIn = Maybe.fromMaybe 0 (Map.lookup cName vals) 
-    aComputed = nop cIn bIn
-    bComputed = nop cIn aIn
-    cComputed = bop aIn bIn
-    aNew = sa aIn cComputed cIn
-    bNew = sb bIn cComputed cIn
+    [aIn,bIn,cIn] = map getVal [aName, bName, cName]
+    getVal name = Maybe.fromMaybe 0 $ Map.lookup name vals
+    aComputed = cIn - bIn
+    bComputed = cIn - aIn
+    cComputed = aIn + bIn
+    aNew = if cComputed == 0 then cIn / 2 else cIn * aIn / cComputed
+    bNew = if cComputed == 0 then cIn / 2 else cIn * bIn / cComputed
 
--- c = a op b
-numOpWidget :: NumOperator -> CellName -> CellName -> CellName -> Widget
-numOpWidget o c a b = answer where
-  answer = Widget
-    { domain    = Set.fromList [a,b,c]
-    , invariant = \vals -> fromMaybe False $ do
-        [va, vb, vc] <- mapM (`lookup` vals) [a, b, c]
-        return (binop o va vb == vc)
-    , danger    = Set.singleton (domain answer)
-    , methods   = numOpMethods o c a b (danger answer)
-    }
+minusMethods :: CellName -> CellName -> CellName -> 
+                DangerZone -> CellDomain -> Method
+minusMethods cName aName bName dz i vals
+  | dangerous dz i = vals
+  | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
+  | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
+  | i == Set.fromList [cName]       = Map.insert aName aNew . Map.insert bName bNew $ vals
+  | otherwise                       = Map.insert cName cComputed vals
+  where
+    [aIn,bIn,cIn] = map getVal [aName, bName, cName]
+    getVal name = Maybe.fromMaybe 0 $ Map.lookup name vals
+    aComputed = bIn + cIn
+    bComputed = aIn - cIn
+    cComputed = aIn - bIn
+    aNew = if cComputed == 0 then cIn / 2 else cIn * aIn / cComputed
+    bNew = if cComputed == 0 then cIn / 2 else cIn * bIn / cComputed
 
--- meant for + and -
-scaleLin :: Value -> Value -> Value -> Value -> Value
--- 'def' input is the default case
-scaleLin val old new def = if old /= 0 then val * new / old else def
+timesMethods :: CellName -> CellName -> CellName -> 
+                DangerZone -> CellDomain -> Method
+timesMethods cName aName bName dz i vals
+  | dangerous dz i = vals
+  | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
+  | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
+  | i == Set.fromList [cName]       = Map.insert aName aNew . Map.insert bName bNew $ vals
+  | otherwise                       = Map.insert cName cComputed vals
+  where
+    [aIn,bIn,cIn] = map getVal [aName, bName, cName]
+    getVal name = Maybe.fromMaybe 0 $ Map.lookup name vals
+    aComputed = cIn / bIn
+    bComputed = cIn / aIn
+    cComputed = aIn * bIn
+    sqrtC = sqrt (abs cIn)
+    sqrtCComputed = sqrt (abs cComputed)
+    aNew = 
+      if cComputed == 0 then signum cIn * sqrtC 
+      else signum (cIn * cComputed) * aIn * sqrtC / sqrtCComputed
+    bNew = 
+      if cComputed == 0 then sqrtC 
+      else aIn * sqrtC / sqrtCComputed
+           
+divMethods :: CellName -> CellName -> CellName -> 
+                DangerZone -> CellDomain -> Method
+divMethods cName aName bName dz i vals
+  | dangerous dz i = vals
+  | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
+  | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
+  | i == Set.fromList [cName]       = Map.insert aName aNew . Map.insert bName bNew $ vals
+  | otherwise                       = Map.insert cName cComputed vals
+  where
+    [aIn',bIn',cIn'] = map getVal [aName, bName, cName]
+    getVal name = Map.lookup name vals
+    [aIn,bIn,cIn] = map (Maybe.fromMaybe 0) [aIn',bIn',cIn']
+    aComputed = bIn * cIn
+    bComputed = Maybe.fromMaybe 0 $ liftM2 (/) aIn' cIn'
+    cComputed = Maybe.fromMaybe 0 $ liftM2 (/) aIn' bIn'
+    aNew = if bIn == 0 || cIn == 0 || cComputed == 0 then cIn 
+           else aIn * cIn
+    bNew = if bIn == 0 || cIn == 0 || cComputed == 0 then 1 
+           else bIn * cComputed
 
-plusOperator :: NumOperator
-plusOperator = NumOp (+) (-) s s where
-  -- default: c = c/2 + c/2
-  s val old new = scaleLin val old new (new / 2)
-
--- c = a + b
-plusWidget :: CellName -> CellName -> CellName -> Widget
-plusWidget = numOpWidget plusOperator
-
-minusOperator :: NumOperator
-minusOperator = NumOp (-) (+) sa sb where
-  -- default: c = c - 0
-  sa val old new = scaleLin val old new new
-  sb val old new = scaleLin val old new 0
-
--- c = a - b
-minusWidget :: CellName -> CellName -> CellName -> Widget
-minusWidget = numOpWidget minusOperator
-
-
-timesOperator = NumOp (*) (/) sa sb where
-  sa val old new =
-    if old == 0 then sqrt( abs( new ) ) else
-      val * sqrt( abs( new / old ) )
-  sb val old new =
-    if old == 0 then sqrt( abs( new ) ) else
-      if new / old < 0 then (-val) * sqrt( abs( new / old ) ) else
-        val * sqrt( abs( new / old ) )
--- c = a * b
-timesWidget = numOpWidget timesOperator
-
-divOperator = NumOp (/) (flip (/)) sa sb where
-  sa val old new = val * new
-  sb val old new = val * old
--- c = a / b
-divWidget = numOpWidget divOperator
 
 
 
