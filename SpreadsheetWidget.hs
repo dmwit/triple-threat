@@ -18,15 +18,16 @@ import Text.Parsec hiding (many, optional, (<|>))
 type CellDomain = Set CellName
 type DangerZone = Set CellDomain
 type Method     = SpreadsheetValues -> SpreadsheetValues
+type Invariant  = SpreadsheetValues -> Bool
 
 data Widget = Widget
-  { domain    :: CellDomain
-  , invariant :: SpreadsheetValues -> Bool
-  , danger    :: DangerZone
-  , methods   :: CellDomain -> Method
+  { domain       :: CellDomain
+  , existentials :: CellDomain -- note; domain should be distinct from existentials
+  , invariant    :: Invariant
+  , danger       :: DangerZone
+  , methods      :: CellDomain -> Method
   }
   
-
 -- Can also add inequalities at a later date
 data Relation = Eq Formula Formula | And Relation Relation
   deriving (Eq, Ord, Show, Read)
@@ -42,8 +43,9 @@ data RelationWidget = RelationWidget
   
 -- default, identity widget which matches with everything
 defaultWidget :: Widget
-defaultWidget = Widget { domain = dom, invariant = inv, danger = dz, methods = m } where
+defaultWidget = Widget { domain = dom, existentials = exs, invariant = inv, danger = dz, methods = m } where
   dom = Set.empty
+  exs = Set.empty
   inv = \ _ -> True
   dz  = Set.empty
   m   = \ _ -> id
@@ -79,7 +81,7 @@ instance PPrint Bool where
   
 restrictDom :: SpreadsheetValues -> CellDomain -> SpreadsheetValues
 restrictDom vals dom = -- Map.intersection vals . Map.fromSet (const ())
-  Map.intersection vals (Map.fromList $ List.map (\ x -> (x,1)) (Set.elems dom))
+  Map.filterWithKey (\ s _ -> Set.member s dom) vals
 
 safe, dangerous :: DangerZone -> Set CellName -> Bool
 safe = (not .) . dangerous
@@ -98,11 +100,26 @@ minimizeDangerZone x = Set.filter (\s -> and [not (Set.isProperSubsetOf s' s) | 
 
 compose :: Widget -> Widget -> Widget
 compose
-  ( Widget { domain = domk, invariant = invk, danger = dzk, methods = fk })
-  ( Widget { domain = doml, invariant = invl, danger = dzl, methods = fl })
-  = Widget { domain = dom , invariant = inv , danger = dz , methods = f  } where
-  dom      = Set.union domk doml
-  inv vals = invk (restrictDom vals domk) && invl (restrictDom vals doml)
+  ( Widget { domain = domk, existentials = exsk, invariant = invk, danger = dzk, methods = fk })
+  ( Widget { domain = doml, existentials = exsl, invariant = invl, danger = dzl, methods = fl })
+  = Widget { domain = dom , existentials = exs , invariant = inv , danger = dz , methods = f  } where
+  dom        = Set.union domk doml
+  left s     = "l_" ++ s
+  right s    = "r_" ++ s
+  accName s  = 
+    if Set.member s exsk then left s
+    else if Set.member s exsl then right s
+         else s
+  exs        = Set.union (Set.map left exsk) (Set.map right exsl) -- disjoint union
+  -- valsk vals[name] = vals[name] if name \in domk
+  -- valsk vals[name] = vals[l_name] if name \in exsk 
+  valsk vals = Map.union (restrictDom vals domk) evalsk where
+    evalsk = Set.fold g Map.empty exsk
+    g name = Map.alter (\ _ -> Map.lookup (left name) vals) name
+  valsl vals = Map.union (restrictDom vals doml) evalsl where
+    evalsl = Set.fold g Map.empty exsl
+    g name = Map.alter (\ _ -> Map.lookup (left name) vals) name 
+  inv vals = invk (valsk vals) && invl (valsl vals)
   shared   = domk `Set.intersection` doml
   dz       = minimizeDangerZone (dzk `Set.union` dzl `Set.union` Set.fromList
                                    [ (vk `Set.union` vl) `Set.difference` shared
@@ -117,28 +134,23 @@ compose
 
     canRunKFirst   = safe dzk kIn && safe dzl lInShared
     runKFirst vals = let
-      vals'  = fk kIn (restrictDom vals domk)
-      vals'' = fl lInShared (restrictDom vals' doml `Map.union` restrictDom vals doml)
-      in vals' `Map.union` vals''
+      vals_runk = fk kIn (valsk vals)
+      vals_runl = fl lInShared (valsl vals_runk `Map.union` valsl vals)
+      in (Map.mapKeys accName vals_runk) `Map.union` (Map.mapKeys accName vals_runl)
     runLFirst vals = let
-      vals'  = fl lIn (restrictDom vals doml)
-      vals'' = fk kInShared (restrictDom vals' domk `Map.union` restrictDom vals domk)
-      in vals' `Map.union` vals''
+      vals_runl = fl lIn (valsl vals)
+      vals_runk = fk kInShared (valsk vals_runl `Map.union` valsk vals)
+      in (Map.mapKeys accName vals_runl) `Map.union` (Map.mapKeys accName vals_runk)
 
 
 -------------------------------------------------------------------------
 --------------------------------- Step ----------------------------------
 
 step :: Widget -> SpreadsheetValues -> SpreadsheetValues -> SpreadsheetValues
-step (Widget { domain = dom , invariant = inv , danger = dz , methods = f  }) 
-     vals input =
+step w vals input =
   let i = Map.keysSet input in
-  if dangerous dz i
-  then vals 
-  else 
-    let vals' = Map.union input vals in
-    f i vals'
-    
+  if dangerous (danger w) i then vals
+  else (methods w) i (Map.union input vals)
 
 -----------------------------------------------------------------
 --------------------- RelationWidget to Widgets -----------------
@@ -146,7 +158,7 @@ step (Widget { domain = dom , invariant = inv , danger = dz , methods = f  })
 getDomain :: RelationWidget -> CellDomain 
 getDomain w = Set.unions $ Map.keys (equations w)
 
-getInvariant :: Relation -> SpreadsheetValues -> Bool
+getInvariant :: Relation -> Invariant
 getInvariant (Eq f1 f2) vals = 
   let mv1 = cell_get_maybe f1 vals in
   let mv2 = cell_get_maybe f2 vals in
@@ -168,8 +180,9 @@ getMethods eqns dom vals =
 
 
 getWidget :: RelationWidget -> Widget
-getWidget w = Widget { domain = dom , invariant = inv , danger = dz , methods = f  } where
+getWidget w = Widget { domain = dom , existentials = exs , invariant = inv , danger = dz , methods = f  } where
   dom = getDomain w 
+  exs = Set.empty
   inv = getInvariant $ relation w 
   dz  = dangerZone w
   f   = getMethods $ equations w

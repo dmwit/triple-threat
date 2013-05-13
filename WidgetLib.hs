@@ -76,7 +76,7 @@ idWidget a b =
            
 
 opMethods :: Op -> CellName -> CellName -> CellName -> 
-             DangerZone -> CellDomain -> Method
+             DangerZone -> Invariant -> CellDomain -> Method
 opMethods (Infix Plus) = plusMethods
 opMethods (Infix Minus) = minusMethods
 opMethods (Infix Times) = timesMethods
@@ -84,13 +84,14 @@ opMethods (Infix Div) = divMethods
     
 opWidget :: Op -> CellName -> CellName -> CellName -> Widget
 opWidget o c a b =
-  Widget { domain = dom, invariant = inv, danger = dz, methods = m } where
+  Widget { domain = dom, existentials = exs, invariant = inv, danger = dz, methods = m } where
     dom = Set.fromList [a,b,c]
+    exs = Set.empty
     inv = \vals -> fromMaybe False $ do
       [va,vb,vc] <- mapM (`lookup` vals) [a, b, c]
-      return (va + vb == vc)
+      return (vc == (op o) va vb)
     dz = Set.singleton dom
-    m = opMethods o c a b dz
+    m = opMethods o c a b dz inv
     
 plusWidget = opWidget (Infix Plus) 
 minusWidget = opWidget (Infix Minus)
@@ -100,9 +101,10 @@ divWidget = opWidget (Infix Div)
 -------------------------------------------------------------
 
 plusMethods :: CellName -> CellName -> CellName -> 
-               DangerZone -> CellDomain -> Method
-plusMethods cName aName bName dz i vals
+               DangerZone -> Invariant -> CellDomain -> Method
+plusMethods cName aName bName dz inv i vals
   | dangerous dz i = vals
+  | inv vals                        = vals
   | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
   | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
   | i == Set.fromList [cName]       = Map.insert aName aNew . Map.insert bName bNew $ vals
@@ -117,9 +119,10 @@ plusMethods cName aName bName dz i vals
     bNew = if cComputed == 0 then cIn / 2 else cIn * bIn / cComputed
 
 minusMethods :: CellName -> CellName -> CellName -> 
-                DangerZone -> CellDomain -> Method
-minusMethods cName aName bName dz i vals
+                DangerZone -> Invariant -> CellDomain -> Method
+minusMethods cName aName bName dz inv i vals
   | dangerous dz i = vals
+  | inv vals                        = vals
   | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
   | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
   | i == Set.fromList [cName]       = Map.insert aName aNew . Map.insert bName bNew $ vals
@@ -134,9 +137,10 @@ minusMethods cName aName bName dz i vals
     bNew = if cComputed == 0 then cIn / 2 else cIn * bIn / cComputed
 
 timesMethods :: CellName -> CellName -> CellName -> 
-                DangerZone -> CellDomain -> Method
-timesMethods cName aName bName dz i vals
+                DangerZone -> Invariant -> CellDomain -> Method
+timesMethods cName aName bName dz inv i vals
   | dangerous dz i = vals
+  | inv vals                        = vals
   | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
   | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
   | i == Set.fromList [cName]       = Map.insert aName aNew . Map.insert bName bNew $ vals
@@ -157,9 +161,10 @@ timesMethods cName aName bName dz i vals
       else aIn * sqrtC / sqrtCComputed
            
 divMethods :: CellName -> CellName -> CellName -> 
-                DangerZone -> CellDomain -> Method
-divMethods cName aName bName dz i vals
-  | dangerous dz i = vals
+                DangerZone -> Invariant -> CellDomain -> Method
+divMethods cName aName bName dz inv i vals
+  | dangerous dz i                  = vals
+  | inv vals                        = vals
   | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
   | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
   | i == Set.fromList [cName]       = Map.insert aName aNew . Map.insert bName bNew $ vals
