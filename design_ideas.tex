@@ -6,6 +6,7 @@
 \newcommand{\slens}{\lens_s}
 \newcommand{\R}{\mathbb R}
 \newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
 \begin{document}
 The goal is to take the theme ``bidirectional spreadsheet'' and run with it.
 In particular we'd like to design something that would be helpful to
@@ -45,8 +46,9 @@ lens type $f(c_1) \times \cdots \times f(c_n) \lens f(c)$. Given a
 collection of lenses and corresponding spreadsheet types, we can create a
 directed graph whose nodes are $C$ and where there is an edge $(c,c')$ for
 each lens whose type has the form $c_1 \times \cdots \times c' \times \cdots
-c_n \slens c$. We say a collection of lenses has \emph{simple structure}
-when there is at most one \emph{undirected} path between any pair of nodes.
+\times c_n \slens c$. We say a collection of lenses has \emph{simple
+structure} when there is at most one \emph{undirected} path between any pair
+of nodes.
 
 This is a fairly restrictive structural restriction, but note that it does
 allow two (possibly surprising) setups: first, a given cell can have
@@ -124,9 +126,9 @@ the dependency graph is acyclic. (Being acyclic is a significant relaxation
 from the simple structure property, but being affine functions is a
 significant strengthening of the ``any lens will do'' attitude from the
 previous approach.) Call a cell a ``root cell'' if it has no out edges --
-that is, none of the linear formulas in the spreadsheet output to root
+that is, none of the affine formulas in the spreadsheet output to root
 cells. A simple argument shows that, given a cell in the spreadsheet, we
-can write a linear formula which maps the values of root cells to the value
+can write a affine formula which maps the values of root cells to the value
 of the given cell. The argument goes by induction on the length of the
 longest path from a root cell to the given one, and proceeds as in the
 example above by substituting in affine formulas for each non-root variable
@@ -135,7 +137,7 @@ transformations from root cells to any set of cells. If we manage to give a
 characterization of when these affine transformations can be
 bidirectionalized, then we will have given an account of how to handle the
 multi-update problem and relax the simple structure requirement in the parts
-of the spreadsheet where only linear formulae are used.
+of the spreadsheet where only affine formulae are used.
 
 Thus, we can now frame our problem in another way: what is the right way to
 bidirectionalize an affine transformation? Accordingly, we will now step
@@ -231,8 +233,53 @@ analysis in terms of linear functions aren't satisfied. In this section, we
 develop a more sophisticated semantic model which can capture these
 additional behaviors. % TODO: motivate hiding
 
-(TODO: give definition; show id and ``composition''; mention properties of
-composition; perhaps define a few others?)
+\newcommand{\sto}{\mapsto}
+\newcommand{\mlens}[1]{\mathcal M(#1)}
+\newcommand{\mput}{\mathit{put}}
+\newcommand{\danger}{\mathcal D}
+
+\begin{definition}
+    Given sets $C$ (to be thought of as cell names) and $T$ (to be thought
+    of as types), a \emph{spreadsheet type} $\tau : C \sto T$ is a partial
+    finite mapping from $C$ to $T$.
+\end{definition}
+
+\begin{definition}
+    An \emph{instance} $f$ of spreadsheet type $\tau : C \sto T$ is a finite
+    map with the same support as $\tau$ and for which $f(c) : \tau(c)$ for
+    each $c$.
+\end{definition}
+
+\begin{definition}
+    Given a spreadsheet type $\tau : N \sto T$,
+    a \emph{multiway lens} $\ell : \mlens\tau$ is a quadruple
+    $(C,\danger,\tau',\mput,K)$ where
+    \begin{itemize}
+        \item $C$ is a set of names disjoint from $N$,
+        \item $\danger : 2^{2^N}$ is a predicate on sets of names,
+        \item $\tau' : C \sto T$ is a spreadsheet type,
+        \item $\mput : 2^N \to \tau \cup \tau' \to \tau \cup \tau'$
+            is an update function which takes a set of names and an instance
+            of the spreadsheet type $\tau \cup \tau'$ and produces another
+            instance, and
+        \item $K$ is an invariant expressed as a predicate on instances of
+            $\tau \cup \tau'$.
+    \end{itemize}
+\end{definition}
+
+\begin{definition}
+    A multiway lens $\ell$ is \emph{well-formed} when it satisfies the
+    following laws:
+    \begin{itemize}
+        \item $\danger$ is upwards-closed
+        \item $\mput(i,f) \in K$ whenever $i \notin \danger$
+        \item $\mput(i,f) = f$ whenever $f \in K$
+        \item $\left.\mput(i,f)\right|_i = \left.f\right|_i$
+    \end{itemize}
+\end{definition}
+
+(TODO: show id and ``composition''; mention properties of composition;
+perhaps define a few others?)
 
 Pending research:
 \begin{itemize}
