@@ -1,7 +1,12 @@
 \documentclass{article}
 \usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amsthm}
 \newcommand{\lens}{\leftrightarrow}
 \newcommand{\slens}{\lens_s}
+\newcommand{\R}{\mathbb R}
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
 \begin{document}
 The goal is to take the theme ``bidirectional spreadsheet'' and run with it.
 In particular we'd like to design something that would be helpful to
@@ -14,6 +19,7 @@ their business so that it comes out that way in the future.
 don't come as a surprise)
 
 \section{Literal Interpretation}
+\label{sec:naive}
 One basic design idea is to simply describe the connections between cells
 (called ``formulas'' in traditional spreadsheets) via a lens rather than a
 one-way function. We can do this whenever:
@@ -40,8 +46,9 @@ lens type $f(c_1) \times \cdots \times f(c_n) \lens f(c)$. Given a
 collection of lenses and corresponding spreadsheet types, we can create a
 directed graph whose nodes are $C$ and where there is an edge $(c,c')$ for
 each lens whose type has the form $c_1 \times \cdots \times c' \times \cdots
-c_n \slens c$. We say a collection of lenses has \emph{simple structure}
-when there is at most one \emph{undirected} path between any pair of nodes.
+\times c_n \slens c$. We say a collection of lenses has \emph{simple
+structure} when there is at most one \emph{undirected} path between any pair
+of nodes.
 
 This is a fairly restrictive structural restriction, but note that it does
 allow two (possibly surprising) setups: first, a given cell can have
@@ -96,6 +103,7 @@ fixing the values of some cells during the update process). The next two
 sections discuss ways to address these shortcomings.
 
 \section{Linear Algebra}
+\label{sec:global-analysis}
 Consider again the simple three-cell spreadsheet with two equations:
 \begin{align*}
     \tax &= 0.08*\base \\
@@ -113,52 +121,94 @@ refactoring can be done -- and whether it could be done automatically. In
 the following, we suggest one circumstance in which we can do quite well in
 that direction.
 
-Suppose for the moment that each lens' get is a linear function, and that
+Suppose for the moment that each lens' get is an affine function, and that
 the dependency graph is acyclic. (Being acyclic is a significant relaxation
-from the simple structure property, but being linear functions is a
+from the simple structure property, but being affine functions is a
 significant strengthening of the ``any lens will do'' attitude from the
 previous approach.) Call a cell a ``root cell'' if it has no out edges --
-that is, none of the linear formulas in the spreadsheet output to root
+that is, none of the affine formulas in the spreadsheet output to root
 cells. A simple argument shows that, given a cell in the spreadsheet, we
-can write a linear formula which maps the values of root cells to the value
+can write a affine formula which maps the values of root cells to the value
 of the given cell. The argument goes by induction on the length of the
 longest path from a root cell to the given one, and proceeds as in the
-example above by substituting in linear formulas for each non-root variable
-at each step. In fact, we can go a step farther: we can write linear
+example above by substituting in affine formulas for each non-root variable
+at each step. In fact, we can go a step farther: we can write affine
 transformations from root cells to any set of cells. If we manage to give a
-characterization of when these linear transformations can be
+characterization of when these affine transformations can be
 bidirectionalized, then we will have given an account of how to handle the
 multi-update problem and relax the simple structure requirement in the parts
-of the spreadsheet where only linear formulae are used.
+of the spreadsheet where only affine formulae are used.
 
 Thus, we can now frame our problem in another way: what is the right way to
-bidirectionalize a linear transformation? Accordingly, we will now step away
-from spreadsheets and frame our discussion in linear algebra terms.
+bidirectionalize an affine transformation? Accordingly, we will now step
+away from spreadsheets and frame our discussion in linear algebra terms.
 
-(old text:)
-This gives us a way to update non-root cells when any root cell changes. We
-now ask: how should we update root cells when a non-root cell changes? Let
-us return to the example for a moment, but add cells for several kinds of
-products.  The original spreadsheet looks like this:
-\begin{align*}
-    \tax_i &= 0.08*\base_i \\
-    \total_i &= \base_i+\tax_i \\
-    \total &= \sum_{i}\total_i
-\end{align*}
-We compute the following linear functions in terms of the root cells
-$\base_i$:
-\begin{align*}
-    \total_i &= 1.08*\base_i \\
-    \total &= \sum_i 1.08*\base_i
-\end{align*}
-Now we set the $\total$. Because $\total$ depends on many root cells, there
-are many updates to choose from: we could push all of the change into, say,
-$\base_0$, keeping all the others the same; or spread the change evenly; or
-many other strategies. In the following, we will choose the following
-desiderata: we wish to find the change to the root cells which minimizes the
-L2-norm.
+\newcommand{\argmin}[1]{\underset{#1}{\operatorname{argmin}}}
+\newcommand{\lget}{\mathit{get}}
+\newcommand{\lput}{\mathit{put}}
+\newcommand{\x}{\mathbf x}
+\newcommand{\y}{\mathbf y}
+A function $\lget \in \R^m \to \R^n$ is affine exactly when there is a matrix
+$M$ of dimension $n \times m$ and vector $\mathbf b \in \R^n$ such that $\lget(\x) =
+M\x +\mathbf b$.  Affine functions are surjective (and hence bidirectionalizable)
+just when $M$ has rank $n$, so we assume this. When $m=n$, $f$ is a
+bijection. The put function in this case is particularly boring, because it
+ignores the original source:
+\[\lput(\x,\y) = M^{-1}\y\]
+The more interesting case is when $m>n$, and where each $\y$ is therefore
+the image of a nontrivial subspace of $\R^m$. There are many heuristics one
+may choose to identify a particular point in this subspace; we choose the
+specification:
+\[\lput(\x,\y) = \argmin{\x',\lget(\x')=\y}||\x' - \x||\]
 
-(TODO: show how to solve the multi-update problem ``optimally'')
+\newcommand{\transpose}{^\top}
+\begin{theorem}
+    There exists an $m \times n$ matrix $N$ such that
+    \[\lput(\x,\y) = \x + N(\y - \lget(\x))\]
+    satisfies the specification above.
+\end{theorem}
+\begin{proof}
+    The intuition is that we wish to move as little as possible in
+    source-space to match the move in target-space. This can be achieved by
+    minimizing how far we move in the null space of $M$, since (exactly)
+    these motions result in no motion in target-space.
+
+    Take a basis $\{\x_1,\ldots,\x_{m-n}\}$ for the null space of $M$. Then
+    we will take:
+    \begin{align*}
+        B &= \left[\begin{array}{c}
+                \x_1\transpose \\
+                \vdots \\
+                \x_{m-n}\transpose
+            \end{array}\right] \\
+        N &= \left[\begin{array}{c}
+                M \\
+                B
+            \end{array}\right]^{-1}
+            \left[\begin{array}{c}
+                I_n \\
+                \mathbf 0_{m-n,n}
+            \end{array}\right] \\
+    \end{align*}
+    We must now argue three things: that the square matrix in the definition
+    of $N$ is invertible; that $N$ produces a put function that roundtrips;
+    and that the put function produced by $N$ produces minimal changes. The
+    definition above was crafted so that (assuming for the moment that $N$
+    exists) we have $MN = I$, which is used to show the roundtrip property,
+    and $BN = \mathbf 0$, which is used to show minimality.
+
+    invertible: (TODO)
+
+    roundtrip:
+        \begin{align*}
+            \lget(\lput(\x,\y))
+                &= M(\x+N(\y-M\x-\mathbf b))+\mathbf b & \mbox{definition of }\lget,\lput \\
+                &= MN\y + M\x + \mathbf b - MN(M\x + \mathbf b) & \mbox{rearranging terms} \\
+                &= \y & MN=I
+        \end{align*}
+
+    minimal: (TODO)
+\end{proof}
 
 Pending research:
 \begin{itemize}
@@ -170,8 +220,65 @@ Pending research:
     \item how do the Shostak algorithm and Groebner bases fit in?
 \end{itemize}
 \section{Multiway Lenses}
-(TODO: motivate multiway lenses (why did we move to these?); give
-definition; show id and ``composition''; mention properties of composition;
+\label{sec:multiway}
+The discussion in Section~\ref{sec:global-analysis} puts us in a slightly
+uncomfortable situation: previously, our model could handle each lens having
+exactly one output cell, but our analysis gave us the ability to treat
+collections of cells as the output of a lens -- and indeed, to have a single
+semantic object which could define lenses between the input cells and many
+possible collections of output cells. Additionally, not all possible
+collections of cells could act as outputs; in case the defining formulae for
+the output cells were not linearly independent, the assumptions of the
+analysis in terms of linear functions aren't satisfied. In this section, we
+develop a more sophisticated semantic model which can capture these
+additional behaviors. % TODO: motivate hiding
+
+\newcommand{\sto}{\mapsto}
+\newcommand{\mlens}[1]{\mathcal M(#1)}
+\newcommand{\mput}{\mathit{put}}
+\newcommand{\danger}{\mathcal D}
+
+\begin{definition}
+    Given sets $C$ (to be thought of as cell names) and $T$ (to be thought
+    of as types), a \emph{spreadsheet type} $\tau : C \sto T$ is a partial
+    finite mapping from $C$ to $T$.
+\end{definition}
+
+\begin{definition}
+    An \emph{instance} $f$ of spreadsheet type $\tau : C \sto T$ is a finite
+    map with the same support as $\tau$ and for which $f(c) : \tau(c)$ for
+    each $c$.
+\end{definition}
+
+\begin{definition}
+    Given a spreadsheet type $\tau : N \sto T$,
+    a \emph{multiway lens} $\ell : \mlens\tau$ is a quadruple
+    $(C,\danger,\tau',\mput,K)$ where
+    \begin{itemize}
+        \item $C$ is a set of names disjoint from $N$,
+        \item $\danger : 2^{2^N}$ is a predicate on sets of names,
+        \item $\tau' : C \sto T$ is a spreadsheet type,
+        \item $\mput : 2^N \to \tau \cup \tau' \to \tau \cup \tau'$
+            is an update function which takes a set of names and an instance
+            of the spreadsheet type $\tau \cup \tau'$ and produces another
+            instance, and
+        \item $K$ is an invariant expressed as a predicate on instances of
+            $\tau \cup \tau'$.
+    \end{itemize}
+\end{definition}
+
+\begin{definition}
+    A multiway lens $\ell$ is \emph{well-formed} when it satisfies the
+    following laws:
+    \begin{itemize}
+        \item $\danger$ is upwards-closed
+        \item $\mput(i,f) \in K$ whenever $i \notin \danger$
+        \item $\mput(i,f) = f$ whenever $f \in K$
+        \item $\left.\mput(i,f)\right|_i = \left.f\right|_i$
+    \end{itemize}
+\end{definition}
+
+(TODO: show id and ``composition''; mention properties of composition;
 perhaps define a few others?)
 
 Pending research:
