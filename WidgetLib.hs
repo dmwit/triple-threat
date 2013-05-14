@@ -28,8 +28,10 @@ fresh n = "x" ++ show n
 
 generateWidget :: Relation -> Widget
 generateWidget r =
-  let (_,w) = generateWidget' 0 r in
-  w
+  let (n,w) = generateWidget' 0 r in
+  hidevars n w where
+    hidevars 0 w = hide (fresh 0) w
+    hidevars n w = hide (fresh n) $ hidevars (n-1) w
 
 -- internal cells will be called xn for some integer n
 generateWidget' :: Int -> Relation -> (Int,Widget)
@@ -188,13 +190,14 @@ divMethods cName aName bName dz inv i vals
 ------------------------------- parser ----------------------------
 
 loop w s = do
-  putStrLn (pprint s)
+  putStrLn (pprint (domain w,s))
   putStrLn ("Satisfies Invariant: " ++ (pprint $ invariant w s) ++ "\n")
   cellNames <- words <$> prompt "Change cells: "
   case cellNames of
     [] -> loop w (step w s Map.empty)
     _  -> 
-      if dangerous (danger w) (Set.fromList cellNames)
+      let dom = Set.fromList cellNames in
+      if dangerous (danger w) dom || (not $ Set.isSubsetOf dom (domain w))
       then putStrLn "That domain is dangerous!" >> loop w s
       else do
            cellValues <- prompt "Change values to: "

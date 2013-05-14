@@ -75,6 +75,9 @@ instance PPrint [RelationWidget] where
 instance PPrint Bool where
   pprint True = "True"
   pprint False = "False"
+  
+instance PPrint (CellDomain,SpreadsheetValues) where
+  pprint (dom,vals) = pprint $ restrictDom vals dom
 
 -------------------------------------------------------------------------
 ----------------------------- Composition -------------------------------
@@ -83,7 +86,7 @@ restrictDom :: SpreadsheetValues -> CellDomain -> SpreadsheetValues
 restrictDom vals dom = -- Map.intersection vals . Map.fromSet (const ())
   Map.filterWithKey (\ s _ -> Set.member s dom) vals
 
-safe, dangerous :: DangerZone -> Set CellName -> Bool
+safe, dangerous :: DangerZone -> CellDomain -> Bool
 safe = (not .) . dangerous
 dangerous rep s = any (`Set.isSubsetOf` s) (Set.toList rep)
 
@@ -118,7 +121,7 @@ compose
     g name = Map.alter (\ _ -> Map.lookup (left name) vals) name
   valsl vals = Map.union (restrictDom vals doml) evalsl where
     evalsl = Set.fold g Map.empty exsl
-    g name = Map.alter (\ _ -> Map.lookup (left name) vals) name 
+    g name = Map.alter (\ _ -> Map.lookup (right name) vals) name 
   inv vals = invk (valsk vals) && invl (valsl vals)
   shared   = domk `Set.intersection` doml
   dz       = minimizeDangerZone (dzk `Set.union` dzl `Set.union` Set.fromList
@@ -142,6 +145,19 @@ compose
       vals_runk = fk kInShared (valsk vals_runl `Map.union` valsk vals)
       in (Map.mapKeys accName vals_runl) `Map.union` (Map.mapKeys accName vals_runk)
 
+-------------------------------------------------------------------------
+----------------------------- Hide --------------------------------------
+
+hide :: CellName -> Widget -> Widget
+hide c w =
+  if not (Set.member c $ domain w) 
+  then w
+  else Widget { domain = dom , existentials = exs , invariant = inv , danger = dz , methods = f  } where
+    dom = Set.delete c (domain w)
+    exs = Set.insert c (existentials w)
+    inv = invariant w
+    dz  = Set.filter (\s -> not $ Set.member c s) (danger w)
+    f   = methods w
 
 -------------------------------------------------------------------------
 --------------------------------- Step ----------------------------------
@@ -149,8 +165,12 @@ compose
 step :: Widget -> SpreadsheetValues -> SpreadsheetValues -> SpreadsheetValues
 step w vals input =
   let i = Map.keysSet input in
-  if dangerous (danger w) i then vals
-  else (methods w) i (Map.union input vals)
+  if dangerous (danger w) i || (not $ Set.isSubsetOf i (domain w)) 
+  then vals
+  else 
+    let zeros dom = Set.fold g Map.empty dom where
+          g cell vals = Map.insert cell 0 vals
+    in (methods w) i (Map.union input vals) `Map.union` zeros (domain w)
 
 -----------------------------------------------------------------
 --------------------- RelationWidget to Widgets -----------------
@@ -255,7 +275,8 @@ setValueLoop w s = do
   case cellNames of
     [] -> setValueLoop w (step w s Map.empty)
     _  -> 
-      if dangerous (danger w) (Set.fromList cellNames)
+      let dom = Set.fromList cellNames in
+      if dangerous (danger w) dom || (not $ Set.isSubsetOf dom (domain w))
       then putStrLn "That domain is dangerous!" >> setValueLoop w s
       else do
            cellValues <- prompt "Change values to: "
