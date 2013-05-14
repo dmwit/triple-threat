@@ -2,10 +2,12 @@
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{amsthm}
+\usepackage{stmaryrd}
 \newcommand{\lens}{\leftrightarrow}
 \newcommand{\slens}{\lens_s}
 \newcommand{\R}{\mathbb R}
 \newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
 \newtheorem{definition}{Definition}
 \begin{document}
 The goal is to take the theme ``bidirectional spreadsheet'' and run with it.
@@ -278,8 +280,41 @@ additional behaviors. % TODO: motivate hiding
     \end{itemize}
 \end{definition}
 
-(TODO: show id and ``composition''; mention properties of composition;
-perhaps define a few others?)
+It will be convenient to represent danger zones compactly.
+
+\newcommand{\upclose}[2]{\llbracket #1 \rrbracket_{#2}}
+\begin{definition}
+    We will use the notation $\upclose VN$ for \emph{the upward closure of
+    $V$ in $N$}, that is:
+    \[S \in \upclose VN \iff \exists v \in V. v \subset S \subset N\]
+\end{definition}
+
+\begin{lemma}
+    Upward closures are upward closed.
+\end{lemma}
+
+When a set of names $N$ is understood, we will use the notation
+$E_{11}\cdots E_{1n_1},\cdots,E_{m1}\cdots E_{mn_m}$ as shorthand for
+\[\upclose{\{\{E_{11},\cdots,E_{1n_1}\},\cdots,\{E_{m1},\cdots,E_{mn_m}\}\}}N\]
+e.g. $AB,AC$ stands for $\{\{A,B\},\{A,C\},\{A,B,C\}\}$.
+
+\newcommand{\id}{\mathit{id}}
+\begin{definition}
+    For the identity lens over type $t$, we construct the spreadsheet type
+    $\tau:\{A,B\} \mapsto \{t\}=\lambda\textvisiblespace. t$ and define $\id
+    : \mlens\tau$ as follows:
+    \begin{align*}
+        C &= \{\} \\
+        \danger &= AB \\
+        \mput(\{A\},f) &= f[B \mapsto f(A)] \\
+        \mput(i,f) &= f[A \mapsto f(B)] \\
+        K(f) &= f(A) = f(B)
+    \end{align*}
+\end{definition}
+
+(TODO: composition, hiding, renaming, expanding the domain of $\tau$;
+mention properties of composition; perhaps define a few other base ones like
+affine transformations, division/other operators, stringy stuff?)
 
 Pending research:
 \begin{itemize}
