@@ -286,6 +286,24 @@ additional behaviors. % TODO: motivate hiding
     the support of $\tau$.
 \end{definition}
 
+\begin{definition}
+    Lenses $k : \mlens\tau$ and $\ell : \mlens\tau$ are \emph{equivalent},
+    written $k \equiv \ell$, when $k.\danger = \ell.\danger$ and there
+    exists a relation $R$ between instances of $k.\tau'$ and $\ell.\tau'$
+    such that whenever
+    \begin{itemize}
+        \item $f$ is an instance of $\tau$,
+        \item $g\mathrel Rh$,
+        \item $i \subset \mdomain k$, and
+        \item $i \notin k.\danger$
+    \end{itemize}
+    we therefore necessarily have $k.\mput(i,f \cup g)=f' \cup g'$ and
+    $\ell.\mput(i,f \cup h)=f' \cup h'$ for some instance $f'$ of $\tau$ and
+    functions $g'\mathrel Rh'$.
+\end{definition}
+
+Conjecture: $\equiv$ is an equivalence relation.
+
 It will be convenient to represent danger zones compactly.
 
 \newcommand{\upclose}[2]{\llbracket #1 \rrbracket_{#2}}
@@ -351,18 +369,67 @@ right side of an $A \uplus B$ are defined analogously.
             \{(d_k \cup d_\ell) \setminus S
             \mid d_k \in k.\danger, d_\ell \in \ell.\danger\} \\
         \mput(i,f) &= \cond{
-            \zoom_{l,k.C,\ell.C}(k.\mput(i)) \circ \zoom_{r,k.C,\ell.C}(\ell.\mput(i))
-                & \mbox{ when possible} \\
             \zoom_{r,k.C,\ell.C}(\ell.\mput(i)) \circ \zoom_{l,k.C,\ell.C}(k.\mput(i))
+                & \mbox{ when possible} \\
+            \zoom_{l,k.C,\ell.C}(k.\mput(i)) \circ \zoom_{r,k.C,\ell.C}(\ell.\mput(i))
                 & \mbox{ otherwise}
             } \\
         K(f) &= \zoom_{l,k.C,\ell.C}(k.K,f) \land \zoom_{r,k.C,\ell.C}(\ell.K,f)
     \end{align*}
 \end{definition}
 
-(TODO: hiding, renaming, expanding the domain of $\tau$;
-mention properties of composition; perhaps define a few other base ones like
-affine transformations, division/other operators, stringy stuff?)
+\begin{definition}
+    Given $\ell : \mlens\tau$ and $V \in \mdomain\ell$, we define $\nu
+    V.\ell : \mlens{\tau \setminus (V,\tau(V))}$:
+    \begin{align*}
+        C &= \ell.C \cup \{V\} \\
+        \danger &= \{d \mid d \in \ell.\danger \land V \notin d\} \\
+        \mput &= \ell.\mput \\
+        K &= \ell.K
+    \end{align*}
+\end{definition}
+
+\begin{definition}
+    Given $\ell : \mlens\tau$ and two names $V \in \mdomain\ell$ and $W
+    \notin \mdomain\ell$, we can give the renaming $\ell[W/V]$:
+    \begin{align*}
+        C &= \ell.C \\
+        \danger &= \{d[W/V] \mid d \in \ell.\danger\} \\
+        \mput(i,f) &= \ell.\mput(i[V/W], f[V/W])[W/V] \\
+        K(f) &= \ell.K(f[V/W])
+    \end{align*}
+\end{definition}
+
+Constants in the program can be implemented with a lens like this one.
+
+\newcommand{\const}{\mathit{const}}
+\begin{definition}
+    If $t : T$ then $\const(t) : \mlens{\{(A,T)\}}$ is defined as:
+    \begin{align*}
+        C &= \{\} \\
+        \danger &= A \\
+        \mput(i,f) &= f \\
+        K(f) &= f(A) = t
+    \end{align*}
+\end{definition}
+
+Conjecture: all these lenses and combinators are well-behaved.
+
+Known false wish: $k \mid \ell \equiv \ell \mid k$ (possible fix:
+nondeterminism)
+
+Known false wish: $(k \mid \ell) \mid m \equiv k \mid (\ell \mid m)$
+(possible fix: track more detailed information about put method
+interleavings)
+
+Conjecture: when $V \notin \mdomain k$, we have $\nu V. (k \mid \ell) \equiv
+k \mid \nu V. \ell$.
+
+Conjecture: when $k : A \lens B$ and $\ell : B \lens C$, we recover the
+symmetric lens' $k;\ell : A \lens C$ via our $\nu B.(k \mid \ell)$.
+
+(TODO: perhaps define a few other base lenses like affine transformations,
+division/other operators, stringy stuff?)
 
 Pending research:
 \begin{itemize}
