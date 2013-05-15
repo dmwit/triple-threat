@@ -280,6 +280,12 @@ additional behaviors. % TODO: motivate hiding
     \end{itemize}
 \end{definition}
 
+\newcommand{\mdomain}[1]{\mathit{dom}(#1)}
+\begin{definition}
+    The \emph{domain} of lens $\ell : \mlens\tau$, denoted $\mdomain\ell$, is
+    the support of $\tau$.
+\end{definition}
+
 It will be convenient to represent danger zones compactly.
 
 \newcommand{\upclose}[2]{\llbracket #1 \rrbracket_{#2}}
@@ -312,7 +318,49 @@ e.g. $AB,AC$ stands for $\{\{A,B\},\{A,C\},\{A,B,C\}\}$.
     \end{align*}
 \end{definition}
 
-(TODO: composition, hiding, renaming, expanding the domain of $\tau$;
+\newcommand{\cond}[1]{\left\{\begin{array}{ll}#1\end{array}\right.}
+\newcommand{\inl}{\mathit{inl}}
+\newcommand{\inr}{\mathit{inr}}
+\newcommand{\restrict}{\mathit{restrict}}
+\newcommand{\expand}{\mathit{expand}}
+\newcommand{\zoom}{\mathit{zoom}}
+It will be nice to have a higher-order function which focuses its argument
+on a subset of its domain. Variants with $l$ replaced by $r$ to focus on the
+right side of an $A \uplus B$ are defined analogously.
+\begin{align*}
+    \restrict_{l,A,B}(f,i) &= \cond{
+        f(\inl(a)) & i \in A \\
+        f(i) & \mbox{otherwise}
+        } \\
+    \expand_{l,A,B}(f,g,i) &= \cond{
+        f(i) & i = \inr(j) \land j \in B \\
+        g(j) & i = \inl(j) \land j \in A \\
+        g(i) & \mbox{otherwise}
+        } \\
+    \zoom_{l,A,B}(p,f) &= \expand_{l,A,B}(f,p(\restrict_{l,A,B}(f)))
+\end{align*}
+
+\begin{definition}
+    Suppose $k : \mlens{\tau_k}$ and $\ell : \mlens{\tau_\ell}$ and
+    $\tau_k\cup\tau_\ell$ is a (partial) function. Denote their shared
+    domain by $S=\mdomain k \cap \mdomain\ell$. We define $k\mid\ell :
+    \mlens{\tau_k\cup\tau_\ell}$ as:
+    \begin{align*}
+        C &= k.C \uplus \ell.C \\
+        \danger &= k.\danger \cup \ell.\danger \cup
+            \{(d_k \cup d_\ell) \setminus S
+            \mid d_k \in k.\danger, d_\ell \in \ell.\danger\} \\
+        \mput(i,f) &= \cond{
+            \zoom_{l,k.C,\ell.C}(k.\mput(i)) \circ \zoom_{r,k.C,\ell.C}(\ell.\mput(i))
+                & \mbox{ when possible} \\
+            \zoom_{r,k.C,\ell.C}(\ell.\mput(i)) \circ \zoom_{l,k.C,\ell.C}(k.\mput(i))
+                & \mbox{ otherwise}
+            } \\
+        K(f) &= \zoom_{l,k.C,\ell.C}(k.K,f) \land \zoom_{r,k.C,\ell.C}(\ell.K,f)
+    \end{align*}
+\end{definition}
+
+(TODO: hiding, renaming, expanding the domain of $\tau$;
 mention properties of composition; perhaps define a few other base ones like
 affine transformations, division/other operators, stringy stuff?)
 
