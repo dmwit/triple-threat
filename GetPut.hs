@@ -40,6 +40,7 @@ invalid _            v_old _      _ = v_old == 0
 
 cell_get_maybe :: Formula -> SpreadsheetValues -> Maybe Value
 cell_get_maybe (Cell new_name) values = Map.lookup new_name values
+cell_get_maybe (Constant val) values = Just val
 cell_get_maybe (BinOp o f1 f2) values = liftM2 (op o) (cell_get_maybe f1 values) (cell_get_maybe f2 values)
 
 cell_get :: Formula -> SpreadsheetValues -> Value

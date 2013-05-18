@@ -26,40 +26,52 @@ getBinOpWidget (Infix Div)   = divWidget
 fresh :: Int -> CellName
 fresh n = "x" ++ show n
 
-generateWidget :: Relation -> Widget
-generateWidget r =
-  let (n,w) = generateWidget' 0 r in
-  hidevars n w where
-    hidevars 0 w = hide (fresh 0) w
-    hidevars n w = hide (fresh n) $ hidevars (n-1) w
+generateSpreadsheet :: Relation -> Spreadsheet
+generateSpreadsheet r =
+  let (n,w,l,vals) = generateSpreadsheet' 0 r in
+  let sheet = Spreadsheet { widget = w, locked = l, values = vals } in
+  stepSheet sheet Map.empty
 
 -- internal cells will be called xn for some integer n
-generateWidget' :: Int -> Relation -> (Int,Widget)
-generateWidget' n (Eq (Cell a) (Cell b)) = (n,idWidget a b)
-generateWidget' n (Eq (Cell c) (BinOp o f1 f2)) =
-  let w c a b = getBinOpWidget o c a b in
+generateSpreadsheet' :: Int -> Relation -> (Int,Widget,CellDomain,SpreadsheetValues)
+generateSpreadsheet' n (Eq (Cell a) (Cell b)) = 
+  (n, idWidget a b, Set.empty, Map.empty)
+generateSpreadsheet' n (Eq (Cell c) (BinOp o f1 f2)) =
+  let bin c a b = getBinOpWidget o c a b in
   case (f1, f2) of
-    (Cell a, Cell b) -> (n,w c a b)
+    (Cell a, Cell b) -> (n,bin c a b, Set.empty, Map.empty)
+    (Constant v, _) ->
+      let a = fresh n in
+      let (n',w',l',vals') = generateSpreadsheet' (n+1) (Eq (Cell a) f2) in
+      (n', w', Set.insert a l', Map.insert a v vals')
+    (_, Constant v) ->  
+      let b = fresh n in
+      let (n',w',l',vals') = generateSpreadsheet' (n+1) (Eq f1 (Cell b)) in
+      (n', w', Set.insert b l', Map.insert b v vals')
     (Cell a, _)      -> 
       let b = fresh n in
-      let (n',w') = generateWidget' (n+1) (Eq (Cell b) f2) in
-      (n',compose (w c a b) w')
+      let (n',w',l',vals') = generateSpreadsheet' (n+1) (Eq (Cell b) f2) in
+      let w = hide b (compose (bin c a b) w') in
+      (n',w, l', vals')
     (_, Cell b)      -> 
       let a = fresh n in
-      let (n',w') = generateWidget' (n+1) (Eq (Cell a) f1) in
-      (n',compose (w c a b) w')
+      let (n',w',l',vals') = generateSpreadsheet' (n+1) (Eq (Cell a) f1) in
+      let w = hide a (compose (bin c a b) w') in 
+      (n',w , l', vals')
     (_, _)           ->
       let a = fresh n in
-      let (n1,w1) = generateWidget' (n+1) (Eq (Cell a) f1) in
+      let (n1,w1,l1,vals1) = generateSpreadsheet' (n+1) (Eq (Cell a) f1) in
       let b = fresh n1 in
-      let (n2,w2) = generateWidget' (n1+1) (Eq (Cell b) f2) in
-      (n2, compose (w c a b) (compose w1 w2))
-generateWidget' n (Eq f (Cell c)) = generateWidget' n (Eq (Cell c) f)
-generateWidget' n (Eq f1 f2) =
+      let (n2,w2,l2,vals2) = generateSpreadsheet' (n1+1) (Eq (Cell b) f2) in
+      let w = hide a (hide b (compose (bin c a b) (compose w1 w2))) in
+      (n2, w, Set.union l1 l2, Map.union vals1 vals2)
+generateSpreadsheet' n (Eq f (Cell c)) = generateSpreadsheet' n (Eq (Cell c) f)
+generateSpreadsheet' n (Eq f1 f2) =
   let a = fresh n in
-  let (n1,w1) = generateWidget' (n+1) (Eq (Cell a) f1) in
-  let (n2,w2) = generateWidget' n1 (Eq (Cell a) f2) in
-  (n2, compose w1 w2)
+  let (n1,w1,l1,vals1) = generateSpreadsheet' (n+1) (Eq (Cell a) f1) in
+  let (n2,w2,l2,vals2) = generateSpreadsheet' n1 (Eq (Cell a) f2) in
+  let w = hide a (compose w1 w2) in
+  (n2, w, Set.union l1 l2, Map.union vals1 vals2)
                    
 ------------------------------------------------------------------------
                   
@@ -189,25 +201,57 @@ divMethods cName aName bName dz inv i vals
 -------------------------------------------------------------------
 ------------------------------- parser ----------------------------
 
-loop w s = do
-  putStrLn (pprint (domain w,s))
-  putStrLn ("Satisfies Invariant: " ++ (pprint $ invariant w s) ++ "\n")
+loop s = do
+  putStrLn (pprint s)
+  putStrLn ("Satisfies Invariant: " ++ (pprint $ invariant (widget s) (values s)) ++ "\n")
+  choice <- prompt "Lock cells (l), Unlock cells (u), or change cells (c)? "
+  if choice == "l" then lockCells s
+    else if choice == "u" then unlockCells s
+         else if choice == "c" then changeCells s
+              else putStrLn "Please choose either (l), (u) or (c)." >> loop s
+                   
+lockCells s = do
+  cellNames <- words <$> prompt "Lock cells: "
+  let dom = Set.fromList cellNames in
+    if not $ Set.isSubsetOf dom (domain $ widget s)
+    then putStrLn "We can only lock cells in the spreadsheet's domain" >> loop s
+    else
+      let l  = Set.union (locked s) dom in
+      let s' = s {locked = l} in
+      loop s'
+  
+unlockCells s = do  
+  cellNames <- words <$> prompt "Unlock cells: "
+  let dom = Set.fromList cellNames in
+    if not $ Set.isSubsetOf dom (locked s) 
+    then putStrLn "Not all these cells are locked!" >> loop s
+    else
+      let l  = Set.difference (locked s) dom in
+      let s' = Spreadsheet {widget = widget s, locked = l, values = values s} in
+      loop s'
+                                      
+changeCells s = do
   cellNames <- words <$> prompt "Change cells: "
   case cellNames of
-    [] -> loop w (step w s Map.empty)
+    [] -> loop (stepSheet s Map.empty)
     _  -> 
+      let w   = widget s in
       let dom = Set.fromList cellNames in
-      if dangerous (danger w) dom || (not $ Set.isSubsetOf dom (domain w))
-      then putStrLn "That domain is dangerous!" >> loop w s
-      else do
-           cellValues <- prompt "Change values to: "
-           case readsWords cellValues of
-             [] -> putStrLn "That didn't look like numbers to me!" >> loop w s
-             cellValues:_
-               | length cellValues /= length cellNames -> 
-                 putStrLn "Please give as many values as you gave names." >> loop w s
-               | otherwise -> loop w (step w s (Map.fromList (zip cellNames cellValues)))
-
+      if not $ Set.null $ Set.intersection dom (locked s)
+      then putStrLn ("That domain is locked.") >> loop s
+      else
+        let l = Set.union (locked s) $ Set.fromList cellNames in
+        if dangerous (danger w) l || (not $ Set.isSubsetOf l (domain w))
+        then putStrLn ("That domain (" ++ pprint l ++ ") is dangerous!") >> loop s
+        else do
+          cellValues <- prompt "Change values to: "
+          case readsWords cellValues of
+            [] -> putStrLn "That didn't look like numbers to me!" >> loop s
+            cellValues:_
+              | length cellValues /= length cellNames -> 
+                putStrLn "Please give as many values as you gave names." >> loop s
+              | otherwise -> loop (stepSheet s (Map.fromList (zip cellNames cellValues)))
+                              
 main = do
   a <- getArgs
   case a of 
@@ -216,9 +260,9 @@ main = do
       case parse parser fileName s of
         Left err -> print err
         Right l -> -- list of relations
-          let w = List.foldl g defaultWidget l where
-                g w r = compose w (generateWidget r)
+          let sheet = List.foldl g defaultSpreadsheet l where
+                g sp r = composeSheet sp (generateSpreadsheet r)
           in do
             putStrLn (pprint l)
-            loop w Map.empty
+            loop sheet
     _ -> putStrLn "Call with one argument naming a file with a relation."

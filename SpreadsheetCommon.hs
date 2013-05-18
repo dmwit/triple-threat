@@ -24,7 +24,7 @@ type SpreadsheetValues   = Map CellName Value
 type DependencyGraph     = Map CellName (Set.Set CellName)
 
 data Formula
-  = Cell CellName
+  = Cell CellName | Constant Value
   | BinOp Op Formula Formula
   deriving (Eq, Ord, Show, Read)
 
@@ -58,6 +58,7 @@ instance PPrint [CellName] where pprint cells = intercalate " " cells
 
 instance PPrint Formula where
   pprint (Cell s) = "<" ++ s ++ ">"
+  pprint (Constant v) = "[" ++ show v ++ "]"
   pprint (BinOp (Infix  o) f1 f2) = "(" ++ pprint f1 ++ pprint o ++ pprint f2 ++ ")"
   pprint (BinOp (Prefix o) f1 f2) = pprint o ++ "(" ++ pprint f1 ++ "," ++ pprint f2 ++ ")"
 
@@ -94,7 +95,7 @@ instance PPrint (Set.Set Equation) where
 ---------------------------- Parser -----------------------------
 
 parseCellName = many1 alphaNum -- many1 (noneOf " >,")
-parseConst    = many1 (noneOf "#")
+parseConst    = many1 (digit <|> char '.') -- many1 (noneOf "#")
 
 class Parseable a where
   parser :: Stream s m Char => ParsecT s u m a
@@ -116,9 +117,10 @@ instance Parseable PreOp where
 
 
 instance Parseable Formula where
-  parser = chainl1 (parens <|> cell) (BinOp . Infix <$> parser) <|> prefix_exp where
+  parser = chainl1 (parens <|> cell <|> const) (BinOp . Infix <$> parser) <|> prefix_exp where
     prefix_exp = BinOp . Prefix <$> parser <* string "(" <*> parser <* string "," <*> parser <* string ")"
     cell   = string "<" *> (Cell <$> parseCellName) <* string ">"
+    const  = string "[" *> (Constant . read <$> parseConst) <* string "]"
     parens = string "(" *> parser <* string ")"
 
 instance Parseable Equation where

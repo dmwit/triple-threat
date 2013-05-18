@@ -27,6 +27,11 @@ data Widget = Widget
   , danger       :: DangerZone
   , methods      :: CellDomain -> Method
   }
+data Spreadsheet = Spreadsheet
+  { widget :: Widget
+  , locked :: CellDomain
+  , values :: SpreadsheetValues
+  }
   
 -- Can also add inequalities at a later date
 data Relation = Eq Formula Formula | And Relation Relation
@@ -42,6 +47,9 @@ data RelationWidget = RelationWidget
   
   
 -- default, identity widget which matches with everything
+defaultSpreadsheet :: Spreadsheet
+defaultSpreadsheet = Spreadsheet { widget = defaultWidget, locked = Set.empty, values = Map.empty }
+
 defaultWidget :: Widget
 defaultWidget = Widget { domain = dom, existentials = exs, invariant = inv, danger = dz, methods = m } where
   dom = Set.empty
@@ -76,8 +84,11 @@ instance PPrint Bool where
   pprint True = "True"
   pprint False = "False"
   
-instance PPrint (CellDomain,SpreadsheetValues) where
-  pprint (dom,vals) = pprint $ restrictDom vals dom
+instance PPrint Spreadsheet where
+  pprint sheet = "\n Locked cells: " ++ slocked ++ "\n Danger Zone: " ++ sdz ++ "\n Values: " ++ "\n" ++ svals where
+    sdz     = pprint $ danger $ widget sheet
+    slocked = pprint $ locked sheet
+    svals   = pprint $ restrictDom (values sheet) (domain $ widget sheet) 
 
 -------------------------------------------------------------------------
 ----------------------------- Composition -------------------------------
@@ -100,6 +111,15 @@ dangerous rep s = any (`Set.isSubsetOf` s) (Set.toList rep)
 -- representation, replace them with the single set S.". We don't try to do
 -- that yet.
 minimizeDangerZone x = Set.filter (\s -> and [not (Set.isProperSubsetOf s' s) | s' <- Set.toList x]) x
+
+composeSheet :: Spreadsheet -> Spreadsheet -> Spreadsheet
+composeSheet 
+  (Spreadsheet { widget = wk, locked = lk, values = valsk })
+  (Spreadsheet { widget = wl, locked = ll, values = valsl })
+  = Spreadsheet { widget = w, locked = l, values = vals } where
+    w = compose wk wl
+    l = Set.union lk ll
+    vals = Map.union valsk valsl
 
 compose :: Widget -> Widget -> Widget
 compose
@@ -172,12 +192,20 @@ step w vals input =
           g cell vals = Map.insert cell 0 vals
     in (methods w) i (Map.union input vals) `Map.union` zeros (domain w)
 
+stepSheet :: Spreadsheet -> SpreadsheetValues -> Spreadsheet
+stepSheet sheet input = 
+  let locked_vals = restrictDom (values sheet) (locked sheet) in
+  let input' = Map.union locked_vals input in
+  let vals = step (widget sheet) (values sheet) input' in
+  Spreadsheet { widget = widget sheet, locked = locked sheet, values = vals }
+
 -----------------------------------------------------------------
 --------------------- RelationWidget to Widgets -----------------
   
 getDomain :: RelationWidget -> CellDomain 
 getDomain w = Set.unions $ Map.keys (equations w)
 
+--this invariant doesn't relate hidden values
 getInvariant :: Relation -> Invariant
 getInvariant (Eq f1 f2) vals = 
   let mv1 = cell_get_maybe f1 vals in
