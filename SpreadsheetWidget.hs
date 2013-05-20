@@ -119,8 +119,10 @@ composeSheet
   = Spreadsheet { widget = w, locked = l, values = vals } where
     w = compose wk wl
     l = Set.union lk ll
-    vals = Map.union valsk valsl
+    vals = Map.union valsk valsl -- should run put after this, maybe?
 
+-- TODO: write a version that assumes the existential variables are disjoint,
+-- then a clause that enforces this and calls the simple implementation
 compose :: Widget -> Widget -> Widget
 compose
   ( Widget { domain = domk, existentials = exsk, invariant = invk, danger = dzk, methods = fk })

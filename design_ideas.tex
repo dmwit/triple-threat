@@ -222,6 +222,10 @@ Pending research:
     \item how do the Shostak algorithm and Groebner bases fit in?
 \end{itemize}
 \section{Multiway Lenses}
+% TODO:
+% change to a flat name representation with a constraint on composition
+% no types
+% list all the ways to fix partiality
 \label{sec:multiway}
 The discussion in Section~\ref{sec:global-analysis} puts us in a slightly
 uncomfortable situation: previously, our model could handle each lens having
@@ -408,7 +412,7 @@ Constants in the program can be implemented with a lens like this one.
     \begin{align*}
         C &= \{\} \\
         \danger &= A \\
-        \mput(i,f) &= f \\
+        \mput(i,f) &= \lambda v. t \\
         K(f) &= f(A) = t
     \end{align*}
 \end{definition}
@@ -419,8 +423,8 @@ Known false wish: $k \mid \ell \equiv \ell \mid k$ (possible fix:
 nondeterminism)
 
 Known false wish: $(k \mid \ell) \mid m \equiv k \mid (\ell \mid m)$
-(possible fix: track more detailed information about put method
-interleavings)
+(possible fixes: track more detailed information about put method
+interleavings, multiway composition, more restrictive danger zones)
 
 Conjecture: when $V \notin \mdomain k$, we have $\nu V. (k \mid \ell) \equiv
 k \mid \nu V. \ell$.

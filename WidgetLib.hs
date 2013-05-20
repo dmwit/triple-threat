@@ -195,6 +195,17 @@ divMethods cName aName bName dz inv i vals
     bNew = if bIn == 0 || cIn == 0 || cComputed == 0 then 1 
            else bIn * cComputed
 
+-------------------------------------------------------------------
+----------------------------- constants ---------------------------
+
+constWidget :: CellName -> Value -> Widget
+constWidget n t = Widget
+  { domain       = Set.singleton n
+  , existentials = Set.empty
+  , invariant    = \v -> Map.lookup n v == Just t
+  , danger       = Set.singleton (Set.singleton n)
+  , methods      = \_ v -> Map.insert n t v
+  }
 
 
 
