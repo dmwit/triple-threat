@@ -15,6 +15,7 @@ import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.List as List
 import qualified Control.Monad as M
+import qualified Control.Monad.State as S
 
 -- getBinOpWidget o a b c <=> a o b c
 getBinOpWidget :: Op -> CellName -> CellName -> CellName -> Widget
@@ -23,71 +24,72 @@ getBinOpWidget (Infix Minus) = minusWidget
 getBinOpWidget (Infix Times) = timesWidget
 getBinOpWidget (Infix Div)   = divWidget
 
-fresh :: Int -> CellName
-fresh n = "x" ++ show n
 
-generateSpreadsheet :: Relation -> Spreadsheet
-generateSpreadsheet r =
-  let (n,w,l,vals) = generateSpreadsheet' 0 r in
-  let sheet = Spreadsheet { widget = w, locked = l, values = vals } in
-  stepSheet sheet Map.empty
+generateSpreadsheet :: Widget -> Spreadsheet
+generateSpreadsheet w = 
+  let vals = step w Map.empty Map.empty in
+  Spreadsheet { widget = w, locked = Set.empty, values = vals }
 
 -- internal cells will be called xn for some integer n
-generateSpreadsheet' :: Int -> Relation -> (Int,Widget,CellDomain,SpreadsheetValues)
-generateSpreadsheet' n (Eq (Cell a) (Cell b)) = 
-  (n, idWidget a b, Set.empty, Map.empty)
-generateSpreadsheet' n (Eq (Cell c) (BinOp o f1 f2)) =
-  let bin c a b = getBinOpWidget o c a b in
-  case (f1, f2) of
-    (Cell a, Cell b) -> (n,bin c a b, Set.empty, Map.empty)
-    (Constant v, _) ->
-      let a = fresh n in
-      let (n',w',l',vals') = generateSpreadsheet' (n+1) (Eq (Cell a) f2) in
-      (n', w', Set.insert a l', Map.insert a v vals')
-    (_, Constant v) ->  
-      let b = fresh n in
-      let (n',w',l',vals') = generateSpreadsheet' (n+1) (Eq f1 (Cell b)) in
-      (n', w', Set.insert b l', Map.insert b v vals')
-    (Cell a, _)      -> 
-      let b = fresh n in
-      let (n',w',l',vals') = generateSpreadsheet' (n+1) (Eq (Cell b) f2) in
-      let w = hide b (compose (bin c a b) w') in
-      (n',w, l', vals')
-    (_, Cell b)      -> 
-      let a = fresh n in
-      let (n',w',l',vals') = generateSpreadsheet' (n+1) (Eq (Cell a) f1) in
-      let w = hide a (compose (bin c a b) w') in 
-      (n',w , l', vals')
-    (_, _)           ->
-      let a = fresh n in
-      let (n1,w1,l1,vals1) = generateSpreadsheet' (n+1) (Eq (Cell a) f1) in
-      let b = fresh n1 in
-      let (n2,w2,l2,vals2) = generateSpreadsheet' (n1+1) (Eq (Cell b) f2) in
-      let w = hide a (hide b (compose (bin c a b) (compose w1 w2))) in
-      (n2, w, Set.union l1 l2, Map.union vals1 vals2)
-generateSpreadsheet' n (Eq f (Cell c)) = generateSpreadsheet' n (Eq (Cell c) f)
-generateSpreadsheet' n (Eq f1 f2) =
-  let a = fresh n in
-  let (n1,w1,l1,vals1) = generateSpreadsheet' (n+1) (Eq (Cell a) f1) in
-  let (n2,w2,l2,vals2) = generateSpreadsheet' n1 (Eq (Cell a) f2) in
-  let w = hide a (compose w1 w2) in
-  (n2, w, Set.union l1 l2, Map.union vals1 vals2)
-                   
+          
+getName :: Int -> String
+getName x = "x" ++ show x
+                        
+fresh :: S.State Int String 
+fresh = do
+  x <- S.get
+  S.put (x+1)
+  return (getName x)
+
+compileFormula :: Formula -> S.State Int (CellName,Widget)
+compileFormula (Cell n)  = return (n, defaultWidget)
+compileFormula (Constant c) = do
+  x <- fresh 
+  return (x, constWidget x c)
+compileFormula (BinOp o f1 f2) = do
+  (a,w1) <- compileFormula f1
+  (b,w2) <- compileFormula f2
+  c <- fresh
+  return (c, compose (getBinOpWidget o c a b) (compose w1 w2))
+  
+compileRelation :: Relation -> S.State Int Widget
+compileRelation (Eq f1 f2) = do
+  (a, w1) <- compileFormula f1
+  (b, w2) <- compileFormula f2
+  return (compose (compose (idWidget a b) w1) w2)
+  
+compile :: Relation -> Widget
+compile r = --fst $ S.runState (compileRelation r) 0
+  hideVars $ S.runState (compileRelation r) 0 where
+    hideVars (w,0) = w
+    hideVars (w,n) = let n' = n-1 in
+      hide (getName n') (hideVars(w,n'))
+      
+  
 ------------------------------------------------------------------------
                   
 --------------------------------------------------------------------------
 
-idWidget a b = 
-  getWidget $ RelationWidget {relation = rel, equations = eq, dangerZone = dz}
+idMethods :: CellName -> CellName -> DangerZone -> Invariant -> CellDomain -> Method
+idMethods aName bName dz inv i vals
+  | dangerous dz i           = vals
+  | inv vals                 = vals
+  | i == Set.singleton bName = Map.insert aName bVal vals
+  | otherwise                = Map.insert bName aVal vals
   where
-    rel = Eq (Cell a) (Cell b)
-    dz  = Set.singleton $ Set.fromList [a,b]
-    eq0 = Equation a (Cell b)
-    eqa = Equation b (Cell a) 
-    eq  = Map.fromList [(Set.empty, Set.singleton eq0),
-                        (Set.fromList [a], Set.singleton eqa),
-                        (Set.fromList [b], Set.singleton eq0)]
-           
+    [aVal,bVal] = map getVal [aName,bName]
+    getVal name = Maybe.fromMaybe 0 $ Map.lookup name vals
+
+idWidget a b = 
+  Widget {domain = dom, existentials = exs, invariant = inv, danger = dz, methods = m } where
+    dom = Set.fromList [a,b]
+    exs = Set.empty
+    inv = \vals -> fromMaybe False $ do
+      [va,vb] <- mapM (`lookup` vals) [a,b]
+      return (va == vb)
+    dz = Set.singleton dom
+    m = idMethods a b dz inv
+  
 
 opMethods :: Op -> CellName -> CellName -> CellName -> 
              DangerZone -> Invariant -> CellDomain -> Method
@@ -208,7 +210,6 @@ constWidget n t = Widget
   }
 
 
-
 -------------------------------------------------------------------
 ------------------------------- parser ----------------------------
 
@@ -251,7 +252,7 @@ changeCells s = do
       if not $ Set.null $ Set.intersection dom (locked s)
       then putStrLn ("That domain is locked.") >> loop s
       else
-        let l = Set.union (locked s) $ Set.fromList cellNames in
+        let l = dom `Set.union` locked s in
         if dangerous (danger w) l || (not $ Set.isSubsetOf l (domain w))
         then putStrLn ("That domain (" ++ pprint l ++ ") is dangerous!") >> loop s
         else do
@@ -271,9 +272,9 @@ main = do
       case parse parser fileName s of
         Left err -> print err
         Right l -> -- list of relations
-          let sheet = List.foldl g defaultSpreadsheet l where
-                g sp r = composeSheet sp (generateSpreadsheet r)
+          let w = List.foldl g defaultWidget l where
+                g w r = compose w (compile r)
           in do
             putStrLn (pprint l)
-            loop sheet
+            loop $ generateSpreadsheet w
     _ -> putStrLn "Call with one argument naming a file with a relation."

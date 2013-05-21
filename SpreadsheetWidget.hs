@@ -37,15 +37,9 @@ data Spreadsheet = Spreadsheet
 data Relation = Eq Formula Formula | And Relation Relation
   deriving (Eq, Ord, Show, Read)
   
--- Define RelationWidgets in terms of equations and relations we can read,
--- then translate them into methods and invariants
-data RelationWidget = RelationWidget
-  { relation  :: Relation
-  , equations :: Map CellDomain (Set Equation)
-  , dangerZone:: DangerZone
-  }
-  
-  
+-----------------------------------------------------------------
+------------------- Default Widget ------------------------------  
+
 -- default, identity widget which matches with everything
 defaultSpreadsheet :: Spreadsheet
 defaultSpreadsheet = Spreadsheet { widget = defaultWidget, locked = Set.empty, values = Map.empty }
@@ -69,20 +63,8 @@ instance PPrint Relation where
 instance PPrint (Map CellDomain (Set Equation)) where
   pprint m = unlines [pprint dom ++ " : " ++ pprint set_eq | (dom, set_eq) <- Map.assocs m]
 
-
-instance PPrint RelationWidget where
-  pprint w = 
-    pprint (relation w) ++ "\n" ++ pprint (dangerZone w) ++ "\n" ++ pprint (equations w)
-
 instance PPrint [Relation] where
   pprint ls = unlines (map pprint ls)
-  
-instance PPrint [RelationWidget] where  
-  pprint ls = intercalate "--\n" (map pprint ls)
-
-instance PPrint Bool where
-  pprint True = "True"
-  pprint False = "False"
   
 instance PPrint Spreadsheet where
   pprint sheet = "\n Locked cells: " ++ slocked ++ "\n Danger Zone: " ++ sdz ++ "\n Values: " ++ "\n" ++ svals where
@@ -116,35 +98,30 @@ composeSheet :: Spreadsheet -> Spreadsheet -> Spreadsheet
 composeSheet 
   (Spreadsheet { widget = wk, locked = lk, values = valsk })
   (Spreadsheet { widget = wl, locked = ll, values = valsl })
-  = Spreadsheet { widget = w, locked = l, values = vals } where
+  = Spreadsheet { widget = w, locked = l, values = step w vals Map.empty} where
     w = compose wk wl
     l = Set.union lk ll
     vals = Map.union valsk valsl -- should run put after this, maybe?
 
--- TODO: write a version that assumes the existential variables are disjoint,
--- then a clause that enforces this and calls the simple implementation
+
 compose :: Widget -> Widget -> Widget
-compose
+compose w1 w2 = compose_ w1' w2' where
+  left  n = "l_" ++ n
+  right n = "r_" ++ n
+  exs1    = Set.elems $ existentials w1
+  w1'     = rename (zip exs1 (map left exs1)) w1
+  exs2    = Set.elems $ existentials w2
+  w2'     = rename (zip exs2 (map right exs2)) w2
+  
+    
+compose_ :: Widget -> Widget -> Widget
+compose_
   ( Widget { domain = domk, existentials = exsk, invariant = invk, danger = dzk, methods = fk })
   ( Widget { domain = doml, existentials = exsl, invariant = invl, danger = dzl, methods = fl })
   = Widget { domain = dom , existentials = exs , invariant = inv , danger = dz , methods = f  } where
   dom        = Set.union domk doml
-  left s     = "l_" ++ s
-  right s    = "r_" ++ s
-  accName s  = 
-    if Set.member s exsk then left s
-    else if Set.member s exsl then right s
-         else s
-  exs        = Set.union (Set.map left exsk) (Set.map right exsl) -- disjoint union
-  -- valsk vals[name] = vals[name] if name \in domk
-  -- valsk vals[name] = vals[l_name] if name \in exsk 
-  valsk vals = Map.union (restrictDom vals domk) evalsk where
-    evalsk = Set.fold g Map.empty exsk
-    g name = Map.alter (\ _ -> Map.lookup (left name) vals) name
-  valsl vals = Map.union (restrictDom vals doml) evalsl where
-    evalsl = Set.fold g Map.empty exsl
-    g name = Map.alter (\ _ -> Map.lookup (right name) vals) name 
-  inv vals = invk (valsk vals) && invl (valsl vals)
+  exs        = Set.union exsk exsl -- disjoint union
+  inv vals = invk (restrictDom vals domk) && invl (restrictDom vals doml)
   shared   = domk `Set.intersection` doml
   dz       = minimizeDangerZone (dzk `Set.union` dzl `Set.union` Set.fromList
                                    [ (vk `Set.union` vl) `Set.difference` shared
@@ -159,13 +136,13 @@ compose
 
     canRunKFirst   = safe dzk kIn && safe dzl lInShared
     runKFirst vals = let
-      vals_runk = fk kIn (valsk vals)
-      vals_runl = fl lInShared (valsl vals_runk `Map.union` valsl vals)
-      in (Map.mapKeys accName vals_runk) `Map.union` (Map.mapKeys accName vals_runl)
+      vals_runk = fk kIn vals
+      vals_runl = fl lInShared (vals_runk `Map.union` vals)
+      in vals_runl `Map.union` vals_runk
     runLFirst vals = let
-      vals_runl = fl lIn (valsl vals)
-      vals_runk = fk kInShared (valsk vals_runl `Map.union` valsk vals)
-      in (Map.mapKeys accName vals_runl) `Map.union` (Map.mapKeys accName vals_runk)
+      vals_runl = fl lIn vals
+      vals_runk = fk kInShared (vals_runl `Map.union` vals)
+      in vals_runk `Map.union` vals_runl
 
 -------------------------------------------------------------------------
 ----------------------------- Hide --------------------------------------
@@ -174,12 +151,44 @@ hide :: CellName -> Widget -> Widget
 hide c w =
   if not (Set.member c $ domain w) 
   then w
-  else Widget { domain = dom , existentials = exs , invariant = inv , danger = dz , methods = f  } where
-    dom = Set.delete c (domain w)
-    exs = Set.insert c (existentials w)
-    inv = invariant w
-    dz  = Set.filter (\s -> not $ Set.member c s) (danger w)
-    f   = methods w
+  else Widget { domain = Set.delete c (domain w)
+              , existentials = Set.insert c (existentials w)
+              , invariant = invariant w 
+              , danger = Set.filter (\s -> not $ Set.member c s) (danger w)
+              , methods = methods w }
+
+-------------------------------------------------------------------------
+-------------------------------- Rename ---------------------------------
+
+-- rename n1 n2 w = w' where n1 is a cell name is w
+renameCell :: CellName -> CellName -> Widget -> Widget
+renameCell n1 n2 w = 
+  if not (Set.member n1 $ domain w) then w
+  else w {domain = dom, danger = dz, methods = f} where
+    changeDom d = Set.insert n2 (Set.delete n1 d)
+    changeVals n1 n2 vals = 
+      Map.delete n1 $ Map.alter (\ _ -> Map.lookup n1 vals) n2 vals 
+    dom      = changeDom (domain w)
+    dz       = Set.map changeDom (danger w)
+    f i vals = changeVals n1 n2 $ (methods w) i (changeVals n2 n1 vals)
+  
+renameExistential :: CellName -> CellName -> Widget -> Widget
+renameExistential n1 n2 w =
+  if not (Set.member n1 $ existentials w) then w 
+  else w {existentials = exs, methods = f} where
+    change d = Set.insert n2 (Set.delete n1 d)
+    changeVals n1 n2 vals =
+      Map.delete n1 $ Map.alter (\_ -> Map.lookup n1 vals) n2 vals
+    exs      = change (existentials w)
+    f i vals = changeVals n1 n2 $ (methods w) i (changeVals n2 n1 vals)
+
+rename :: [(CellName,CellName)] -> Widget -> Widget
+rename ls w   = foldr g w ls where
+  g (n1,n2) w = if Set.member n1 (domain w) 
+                then renameCell n1 n2 w
+                else if Set.member n1 (existentials w)
+                     then renameExistential n1 n2 w
+                     else w
 
 -------------------------------------------------------------------------
 --------------------------------- Step ----------------------------------
@@ -199,7 +208,7 @@ stepSheet sheet input =
   let locked_vals = restrictDom (values sheet) (locked sheet) in
   let input' = Map.union locked_vals input in
   let vals = step (widget sheet) (values sheet) input' in
-  Spreadsheet { widget = widget sheet, locked = locked sheet, values = vals }
+  sheet {values = vals}
 
 -----------------------------------------------------------------
 --------------------- RelationWidget to Widgets -----------------
