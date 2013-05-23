@@ -222,10 +222,7 @@ Pending research:
     \item how do the Shostak algorithm and Groebner bases fit in?
 \end{itemize}
 \section{Multiway Lenses}
-% TODO:
-% change to a flat name representation with a constraint on composition
-% no types
-% list all the ways to fix partiality
+% TODO: list all the ways to fix partiality
 \label{sec:multiway}
 The discussion in Section~\ref{sec:global-analysis} puts us in a slightly
 uncomfortable situation: previously, our model could handle each lens having
@@ -239,37 +236,33 @@ analysis in terms of linear functions aren't satisfied. In this section, we
 develop a more sophisticated semantic model which can capture these
 additional behaviors. % TODO: motivate hiding
 
+We will fix a set $T$ of spreadsheet values -- say, numbers and strings.
+
 \newcommand{\sto}{\mapsto}
 \newcommand{\mlens}[1]{\mathcal M(#1)}
 \newcommand{\mput}{\mathit{put}}
 \newcommand{\danger}{\mathcal D}
 
 \begin{definition}
-    Given sets $C$ (to be thought of as cell names) and $T$ (to be thought
-    of as types), a \emph{spreadsheet type} $\tau : C \sto T$ is a partial
-    finite mapping from $C$ to $T$.
+    A \emph{spreadsheet type} $C$ is a set of names.
 \end{definition}
 
 \begin{definition}
-    An \emph{instance} $f$ of spreadsheet type $\tau : C \sto T$ is a finite
-    map with the same support as $\tau$ and for which $f(c) : \tau(c)$ for
-    each $c$.
+    An \emph{instance} $f$ of spreadsheet type $C$ is a function $C \to T$.
 \end{definition}
 
 \begin{definition}
-    Given a spreadsheet type $\tau : N \sto T$,
-    a \emph{multiway lens} $\ell : \mlens\tau$ is a quadruple
-    $(C,\danger,\tau',\mput,K)$ where
+    Given a spreadsheet type $N$, a \emph{multiway lens} $\ell : \mlens N$
+    is a quadruple $(N',\danger,\mput,K)$ where
     \begin{itemize}
-        \item $C$ is a set of names disjoint from $N$,
+        \item $N'$ is a spreadsheet type disjoint from $N$,
         \item $\danger : 2^{2^N}$ is a predicate on sets of names,
-        \item $\tau' : C \sto T$ is a spreadsheet type,
-        \item $\mput : 2^N \to \tau \cup \tau' \to \tau \cup \tau'$
-            is an update function which takes a set of names and an instance
-            of the spreadsheet type $\tau \cup \tau'$ and produces another
-            instance, and
+        \item $\mput : 2^N \to (N \cup N' \to T) \to (N \cup N' \to T)$ is
+            an update function which takes a set of names and an instance of
+            the spreadsheet type $N \cup N'$ and produces another instance,
+            and
         \item $K$ is an invariant expressed as a predicate on instances of
-            $\tau \cup \tau'$.
+            $N \cup N'$.
     \end{itemize}
 \end{definition}
 
@@ -286,34 +279,35 @@ additional behaviors. % TODO: motivate hiding
 
 \newcommand{\mdomain}[1]{\mathit{dom}(#1)}
 \begin{definition}
-    The \emph{domain} of lens $\ell : \mlens\tau$, denoted $\mdomain\ell$, is
-    the support of $\tau$.
+    The \emph{domain} of lens $\ell : \mlens N$, denoted $\mdomain\ell$, is
+    $N$.
 \end{definition}
 
 \begin{definition}
-    Lenses $k : \mlens\tau$ and $\ell : \mlens\tau$ are \emph{equivalent},
+    Lenses $k : \mlens N$ and $\ell : \mlens N$ are \emph{equivalent},
     written $k \equiv \ell$, when $k.\danger = \ell.\danger$ and there
-    exists a relation $R$ between instances of $k.\tau'$ and $\ell.\tau'$
-    such that whenever
+    exists a relation $R$ between instances of $k.N'$ and $\ell.N'$ such
+    that whenever
     \begin{itemize}
-        \item $f$ is an instance of $\tau$,
+        \item $f$ is an instance of $N$,
         \item $g\mathrel Rh$,
         \item $i \subset \mdomain k$, and
         \item $i \notin k.\danger$
     \end{itemize}
     we therefore necessarily have $k.\mput(i,f \cup g)=f' \cup g'$ and
-    $\ell.\mput(i,f \cup h)=f' \cup h'$ for some instance $f'$ of $\tau$ and
+    $\ell.\mput(i,f \cup h)=f' \cup h'$ for some instance $f'$ of $N$ and
     functions $g'\mathrel Rh'$.
 \end{definition}
 
 Conjecture: $\equiv$ is an equivalence relation.
 
-It will be convenient to represent danger zones compactly.
+For an implementation, storing an upward-closed element of $2^{2^N}$ is a
+bit impractical (because of its size). In the remainder of the paper, we
+will operate on representations of such sets.
 
 \newcommand{\upclose}[2]{\llbracket #1 \rrbracket_{#2}}
 \begin{definition}
-    We will use the notation $\upclose VN$ for \emph{the upward closure of
-    $V$ in $N$}, that is:
+    The \emph{upward closure} $\upclose VN$ of $V$ in $N$ is:
     \[S \in \upclose VN \iff \exists v \in V. v \subset S \subset N\]
 \end{definition}
 
@@ -324,13 +318,14 @@ It will be convenient to represent danger zones compactly.
 When a set of names $N$ is understood, we will use the notation
 $E_{11}\cdots E_{1n_1},\cdots,E_{m1}\cdots E_{mn_m}$ as shorthand for
 \[\upclose{\{\{E_{11},\cdots,E_{1n_1}\},\cdots,\{E_{m1},\cdots,E_{mn_m}\}\}}N\]
-e.g. $AB,AC$ stands for $\{\{A,B\},\{A,C\},\{A,B,C\}\}$.
+e.g. $AB,AC$ stands for $\{\{A,B\},\{A,C\},\{A,B,C\}\}$. In our definitions
+below, we will give $\danger$ in these compact representations (and our
+combinators will produce a representation from their sublenses'
+representations of $\danger$).
 
 \newcommand{\id}{\mathit{id}}
 \begin{definition}
-    For the identity lens over type $t$, we construct the spreadsheet type
-    $\tau:\{A,B\} \mapsto \{t\}=\lambda\textvisiblespace. t$ and define $\id
-    : \mlens\tau$ as follows:
+    The identity lens $\id : \mlens{\{A,B\}}$ is defined as follows:
     \begin{align*}
         C &= \{\} \\
         \danger &= AB \\
@@ -341,50 +336,44 @@ e.g. $AB,AC$ stands for $\{\{A,B\},\{A,C\},\{A,B,C\}\}$.
 \end{definition}
 
 \newcommand{\cond}[1]{\left\{\begin{array}{ll}#1\end{array}\right.}
-\newcommand{\inl}{\mathit{inl}}
-\newcommand{\inr}{\mathit{inr}}
-\newcommand{\restrict}{\mathit{restrict}}
-\newcommand{\expand}{\mathit{expand}}
-\newcommand{\zoom}{\mathit{zoom}}
-It will be nice to have a higher-order function which focuses its argument
-on a subset of its domain. Variants with $l$ replaced by $r$ to focus on the
-right side of an $A \uplus B$ are defined analogously.
-\begin{align*}
-    \restrict_{l,A,B}(f,i) &= \cond{
-        f(\inl(a)) & i \in A \\
-        f(i) & \mbox{otherwise}
-        } \\
-    \expand_{l,A,B}(f,g,i) &= \cond{
-        f(i) & i = \inr(j) \land j \in B \\
-        g(j) & i = \inl(j) \land j \in A \\
-        g(i) & \mbox{otherwise}
-        } \\
-    \zoom_{l,A,B}(p,f) &= \expand_{l,A,B}(f,p(\restrict_{l,A,B}(f)))
-\end{align*}
 
+\newcommand{\focus}{\mathit{focus}}
+We will want to run put functions $p$ on bigger instances of spreadsheets
+than $p$ may be expecting. For the variables $p$ doesn't know about, we'll
+keep the old instance's values.
 \begin{definition}
-    Suppose $k : \mlens{\tau_k}$ and $\ell : \mlens{\tau_\ell}$ and
-    $\tau_k\cup\tau_\ell$ is a (partial) function. Denote their shared
-    domain by $S=\mdomain k \cap \mdomain\ell$. We define $k\mid\ell :
-    \mlens{\tau_k\cup\tau_\ell}$ as:
     \begin{align*}
-        C &= k.C \uplus \ell.C \\
-        \danger &= k.\danger \cup \ell.\danger \cup
-            \{(d_k \cup d_\ell) \setminus S
-            \mid d_k \in k.\danger, d_\ell \in \ell.\danger\} \\
-        \mput(i,f) &= \cond{
-            \zoom_{r,k.C,\ell.C}(\ell.\mput(i)) \circ \zoom_{l,k.C,\ell.C}(k.\mput(i))
-                & \mbox{ when possible} \\
-            \zoom_{l,k.C,\ell.C}(k.\mput(i)) \circ \zoom_{r,k.C,\ell.C}(\ell.\mput(i))
-                & \mbox{ otherwise}
-            } \\
-        K(f) &= \zoom_{l,k.C,\ell.C}(k.K,f) \land \zoom_{r,k.C,\ell.C}(\ell.K,f)
+        \focus(p,S,i,f,x) &= \cond{
+            p(i \cap S,f|_S,x) & x \in S \\
+            f(x) & x \notin S
+        }
     \end{align*}
 \end{definition}
 
 \begin{definition}
-    Given $\ell : \mlens\tau$ and $V \in \mdomain\ell$, we define $\nu
-    V.\ell : \mlens{\tau \setminus (V,\tau(V))}$:
+    Suppose $k : \mlens{N_k}$ and $\ell : \mlens{N_\ell}$ and $k.C \cap
+    \ell.C = \emptyset$. Denote their shared domain by $S=N_k \cap N_\ell$
+    and the total domains (including hidden variables) by $T_k=N_k \cup k.C$
+    and $T_\ell=N_\ell \cup \ell.C$. We define $k\mid\ell : \mlens{N_k \cup
+    N_\ell}$ as:
+    \begin{align*}
+        C &= k.C \cup \ell.C \\
+        \danger &= k.\danger \cup \ell.\danger \cup
+            \{(d_k \cup d_\ell) \setminus S
+            \mid d_k \in k.\danger, d_\ell \in \ell.\danger\} \\
+        \mput(i) &= \cond{
+            \focus(\ell.\mput,T_\ell,i) \circ \focus(k.\mput,T_k,i)
+                & \mbox{ when possible} \\
+            \focus(k.\mput,T_k,i) \circ \focus(\ell.\mput,T_\ell,i)
+                & \mbox{ otherwise}
+            } \\
+        K(f) &= k.K(f|_{T_k}) \land \ell.K(f|_{T_\ell})
+    \end{align*}
+\end{definition}
+
+\begin{definition}
+    Given $\ell : \mlens N$ and $V \in N$, we define $\nu V.\ell : \mlens{N
+    \setminus \{V\}}$:
     \begin{align*}
         C &= \ell.C \cup \{V\} \\
         \danger &= \{d \mid d \in \ell.\danger \land V \notin d\} \\
@@ -394,8 +383,8 @@ right side of an $A \uplus B$ are defined analogously.
 \end{definition}
 
 \begin{definition}
-    Given $\ell : \mlens\tau$ and two names $V \in \mdomain\ell$ and $W
-    \notin \mdomain\ell$, we can give the renaming $\ell[W/V]$:
+    Given $\ell : \mlens N$ and two names $V \in N$ and $W \notin N$, we can
+    give the renaming $\ell[W/V]$:
     \begin{align*}
         C &= \ell.C \\
         \danger &= \{d[W/V] \mid d \in \ell.\danger\} \\
@@ -408,7 +397,7 @@ Constants in the program can be implemented with a lens like this one.
 
 \newcommand{\const}{\mathit{const}}
 \begin{definition}
-    If $t : T$ then $\const(t) : \mlens{\{(A,T)\}}$ is defined as:
+    If $t : T$ then $\const(t) : \mlens{\{A\}}$ is defined as:
     \begin{align*}
         C &= \{\} \\
         \danger &= A \\
