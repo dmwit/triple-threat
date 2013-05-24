@@ -7,7 +7,7 @@ import Data.Maybe
 import Data.Set (Set)
 import Prelude hiding (lookup)
 import SpreadsheetCommon
-import SpreadsheetWidget hiding (main)
+import SpreadsheetWidget 
 
 
 import qualified Data.Set as Set
@@ -16,13 +16,6 @@ import qualified Data.Maybe as Maybe
 import qualified Data.List as List
 import qualified Control.Monad as M
 import qualified Control.Monad.State as S
-
--- getBinOpWidget o a b c <=> a o b c
-getBinOpWidget :: Op -> CellName -> CellName -> CellName -> Widget
-getBinOpWidget (Infix Plus)  = plusWidget
-getBinOpWidget (Infix Minus) = minusWidget
-getBinOpWidget (Infix Times) = timesWidget
-getBinOpWidget (Infix Div)   = divWidget
 
 
 generateSpreadsheet :: Widget -> Spreadsheet
@@ -50,7 +43,7 @@ compileFormula (BinOp o f1 f2) = do
   (a,w1) <- compileFormula f1
   (b,w2) <- compileFormula f2
   c <- fresh
-  return (c, compose (getBinOpWidget o c a b) (compose w1 w2))
+  return (c, compose (compose (opWidget o c a b) w1) w2)
   
 compileRelation :: Relation -> S.State Int Widget
 compileRelation (Eq f1 f2) = do
@@ -93,10 +86,11 @@ idWidget a b =
 
 opMethods :: Op -> CellName -> CellName -> CellName -> 
              DangerZone -> Invariant -> CellDomain -> Method
-opMethods (Infix Plus) = plusMethods
+opMethods (Infix Plus)  = plusMethods
 opMethods (Infix Minus) = minusMethods
 opMethods (Infix Times) = timesMethods
-opMethods (Infix Div) = divMethods
+opMethods (Infix Div)   = divMethods
+opMethods (Infix Pow)   = powMethods
     
 opWidget :: Op -> CellName -> CellName -> CellName -> Widget
 opWidget o c a b =
@@ -113,6 +107,7 @@ plusWidget = opWidget (Infix Plus)
 minusWidget = opWidget (Infix Minus)
 timesWidget = opWidget (Infix Times)
 divWidget = opWidget (Infix Div)
+powWidget = opWidget (Infix Pow)
 
 -------------------------------------------------------------
 
@@ -197,6 +192,26 @@ divMethods cName aName bName dz inv i vals
     bNew = if bIn == 0 || cIn == 0 || cComputed == 0 then 1 
            else bIn * cComputed
 
+powMethods :: CellName -> CellName -> CellName ->
+              DangerZone -> Invariant -> CellDomain -> Method
+powMethods cName aName bName dz inv i vals
+  | dangerous dz i = vals
+  | inv vals = vals
+  | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
+  | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
+  | i == Set.fromList [cName]       = Map.insert aName aNew . Map.insert bName bNew $ vals
+  | otherwise                       = Map.insert cName cComputed vals
+  where
+    [aIn,bIn,cIn] = map getVal [aName,bName,cName]
+    getVal name = Maybe.fromMaybe 0 $ Map.lookup name vals
+    aComputed = cIn ** (1 / bIn)
+    bComputed = (log cIn) / (log aIn)
+    aNew = if aIn == 1 || aIn == 0 then cIn
+           else aIn
+    bNew = if aIn == 1 || aIn == 0 then 1
+           else bComputed
+    cComputed = aIn ** bIn
+
 -------------------------------------------------------------------
 ----------------------------- constants ---------------------------
 
@@ -215,7 +230,7 @@ constWidget n t = Widget
 
 loop s = do
   putStrLn (pprint s)
-  putStrLn ("Satisfies Invariant: " ++ (pprint $ invariant (widget s) (values s)) ++ "\n")
+  putStrLn ("Satisfies Invariant: " ++ (show $ invariant (widget s) (values s)) ++ "\n")
   choice <- prompt "Lock cells (l), Unlock cells (u), or change cells (c)? "
   if choice == "l" then lockCells s
     else if choice == "u" then unlockCells s

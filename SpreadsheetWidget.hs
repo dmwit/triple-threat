@@ -213,9 +213,6 @@ stepSheet sheet input =
 -----------------------------------------------------------------
 --------------------- RelationWidget to Widgets -----------------
   
-getDomain :: RelationWidget -> CellDomain 
-getDomain w = Set.unions $ Map.keys (equations w)
-
 --this invariant doesn't relate hidden values
 getInvariant :: Relation -> Invariant
 getInvariant (Eq f1 f2) vals = 
@@ -238,38 +235,14 @@ getMethods eqns dom vals =
    Map.union new_vals vals'
 
 
-getWidget :: RelationWidget -> Widget
-getWidget w = Widget { domain = dom , existentials = exs , invariant = inv , danger = dz , methods = f  } where
-  dom = getDomain w 
-  exs = Set.empty
-  inv = getInvariant $ relation w 
-  dz  = dangerZone w
-  f   = getMethods $ equations w
-
-
 
 -------------------------------------------------------------------------
 ------------------------------ Parser -----------------------------------
-    
-instance Parseable RelationWidget where
-  parser = do
-    rel <- parser -- relation
-    string "\n"
-    dz <- parser -- danger zone
-    string "\n"
-    eqns <- parser -- equations
-    string "!\n"
-    return (RelationWidget { relation = rel, dangerZone = dz, equations = eqns })
+
     
 instance Parseable [Relation] where
   parser = sepBy parser (string ", ")
 
-instance Parseable [RelationWidget] where
-  parser = sepBy parser (string "---\n") -- RelationWidget
-    
-instance Parseable Widget where
-  parser = getWidget <$> parser -- RelationWidget
-        
 instance Parseable Relation where
   parser = do
     f1 <- parser -- formula
@@ -309,7 +282,7 @@ readsWords = mapM noJunk . words where
     
 setValueLoop w s = do
   putStrLn (pprint s)
-  putStrLn ("Satisfies Invariant: " ++ (pprint $ invariant w s) ++ "\n")
+  putStrLn ("Satisfies Invariant: " ++ (show $ invariant w s) ++ "\n")
   cellNames <- words <$> prompt "Change cells: "
   case cellNames of
     [] -> setValueLoop w (step w s Map.empty)
@@ -327,17 +300,3 @@ setValueLoop w s = do
                | otherwise -> setValueLoop w (step w s (Map.fromList (zip cellNames cellValues)))
 
   
-main = do
-  a <- getArgs
-  case a of
-    [fileName] -> do
-      s <- readFile fileName
-      case parse parser fileName s of
-        Left err -> print err
-        Right s -> -- set of relation widgets 
-          let w = foldl g defaultWidget s where
-                g w rw = compose w (getWidget rw)
-          in do 
-            putStrLn (pprint s)
-            setValueLoop w Map.empty
-    _ -> putStrLn "Call with one argument naming a file with some relations, danger zones, methods."

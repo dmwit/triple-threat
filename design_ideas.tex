@@ -221,6 +221,7 @@ Pending research:
         theory?)
     \item how do the Shostak algorithm and Groebner bases fit in?
 \end{itemize}
+
 \section{Multiway Lenses}
 % TODO: list all the ways to fix partiality
 \label{sec:multiway}
@@ -236,27 +237,31 @@ analysis in terms of linear functions aren't satisfied. In this section, we
 develop a more sophisticated semantic model which can capture these
 additional behaviors. % TODO: motivate hiding
 
-We will fix a set $T$ of spreadsheet values -- say, numbers and strings.
 
+\newcommand{\Names}{\mathcal N}
 \newcommand{\sto}{\mapsto}
 \newcommand{\mlens}[1]{\mathcal M(#1)}
 \newcommand{\mput}{\mathit{put}}
 \newcommand{\danger}{\mathcal D}
 
+Let $\Names$ be a set of cell names and 
+$T$ a set of spreadsheet values like numbers or strings.
+
 \begin{definition}
-    A \emph{spreadsheet type} $C$ is a set of names.
+    A \emph{spreadsheet type} $N \subseteq \Names$ is a set of names.
 \end{definition}
 
 \begin{definition}
-    An \emph{instance} $f$ of spreadsheet type $C$ is a function $C \to T$.
+    An \emph{instance} $f$ of a spreadsheet type $N$ is a function $f : N \to T$.
 \end{definition}
 
 \begin{definition}
     Given a spreadsheet type $N$, a \emph{multiway lens} $\ell : \mlens N$
     is a quadruple $(N',\danger,\mput,K)$ where
     \begin{itemize}
-        \item $N'$ is a spreadsheet type disjoint from $N$,
-        \item $\danger : 2^{2^N}$ is a predicate on sets of names,
+        \item $N'$ is a spreadsheet type, called \emph{existential}, which is disjoint from $N$,
+        \item $\danger : 2^{2^N}$ is a predicate on sets of names called the \emph{danger
+            zone} of $\ell$,
         \item $\mput : 2^N \to (N \cup N' \to T) \to (N \cup N' \to T)$ is
             an update function which takes a set of names and an instance of
             the spreadsheet type $N \cup N'$ and produces another instance,
@@ -279,31 +284,37 @@ We will fix a set $T$ of spreadsheet values -- say, numbers and strings.
 
 \newcommand{\mdomain}[1]{\mathit{dom}(#1)}
 \begin{definition}
-    The \emph{domain} of lens $\ell : \mlens N$, denoted $\mdomain\ell$, is
-    $N$.
+    The \emph{domain} of a lens $\ell : \mlens N$, denoted $\mdomain\ell$, is
+    $N$ itself, the set of cell names which represents the visible
+    interface to the lens.
 \end{definition}
 
+Intuitively, we expect two lenses to be equivalent when they have the
+same domain and their put functions behave identically on instances
+restricted to that domain. However, we allow equivalent lenses to 
+behave differently on their respective existential variables $C'$,
+which need not be equal. 
 \begin{definition}
     Lenses $k : \mlens N$ and $\ell : \mlens N$ are \emph{equivalent},
     written $k \equiv \ell$, when $k.\danger = \ell.\danger$ and there
     exists a relation $R$ between instances of $k.N'$ and $\ell.N'$ such
-    that whenever
-    \begin{itemize}
-        \item $f$ is an instance of $N$,
-        \item $g\mathrel Rh$,
-        \item $i \subset \mdomain k$, and
-        \item $i \notin k.\danger$
-    \end{itemize}
-    we therefore necessarily have $k.\mput(i,f \cup g)=f' \cup g'$ and
-    $\ell.\mput(i,f \cup h)=f' \cup h'$ for some instance $f'$ of $N$ and
-    functions $g'\mathrel Rh'$.
+    that whenever (1) $f$ is an instance of $N$, (2) $g$ is an instance of $k.N'$
+    and $h$ is an instance of $\ell.N'$ such that $g \mathrel R h$,
+    and (3) $i\in N - k.\danger$, then there are some instances $f'$, $g'$ and
+    $h'$ of $N$, $k.N'$ and $\ell.N'$ respectively such that
+    \[k.\mput(i,f\cup g) = f' \cup g', \qquad
+      \ell.\mput(i,f\cup h) = f' \cup h', \text{ and} \qquad
+      g' \mathrel R h'. \]
 \end{definition}
 
-Conjecture: $\equiv$ is an equivalence relation.
+\begin{lemma}
+    $\equiv$ is an equivalence relation.
+\end{lemma}
 
-For an implementation, storing an upward-closed element of $2^{2^N}$ is a
-bit impractical (because of its size). In the remainder of the paper, we
-will operate on representations of such sets.
+The size of upward-closed elements of $2^{2^N}$ makes storing danger zones
+in an implementation impractical. Instead, we use a compact representation
+of danger zones such that the upward closure of the representation
+spans the entire set.
 
 \newcommand{\upclose}[2]{\llbracket #1 \rrbracket_{#2}}
 \begin{definition}
@@ -317,92 +328,168 @@ will operate on representations of such sets.
 
 When a set of names $N$ is understood, we will use the notation
 $E_{11}\cdots E_{1n_1},\cdots,E_{m1}\cdots E_{mn_m}$ as shorthand for
-\[\upclose{\{\{E_{11},\cdots,E_{1n_1}\},\cdots,\{E_{m1},\cdots,E_{mn_m}\}\}}N\]
-e.g. $AB,AC$ stands for $\{\{A,B\},\{A,C\},\{A,B,C\}\}$. In our definitions
-below, we will give $\danger$ in these compact representations (and our
-combinators will produce a representation from their sublenses'
-representations of $\danger$).
+\[\upclose{\{\{E_{11},\cdots,E_{1n_1}\},\cdots,\{E_{m1},\cdots,E_{mn_m}\}\}}N.\]
+For example, $AB,AC$ stands for $\{\{A,B\},\{A,C\},\{A,B,C\}\}$. In the definitions
+below, we present $\danger$ using compact representations. We will find
+that, to produce a new danger zone $\danger$, lens combinators can
+equivalently use their sublenses's full upward closures or
+compact representations.
 
-\newcommand{\id}{\mathit{id}}
-\begin{definition}
-    The identity lens $\id : \mlens{\{A,B\}}$ is defined as follows:
-    \begin{align*}
-        C &= \{\} \\
-        \danger &= AB \\
-        \mput(\{A\},f) &= f[B \mapsto f(A)] \\
-        \mput(i,f) &= f[A \mapsto f(B)] \\
-        K(f) &= f(A) = f(B)
-    \end{align*}
-\end{definition}
+\subsection{Combinators}
 
 \newcommand{\cond}[1]{\left\{\begin{array}{ll}#1\end{array}\right.}
 
 \newcommand{\focus}{\mathit{focus}}
-We will want to run put functions $p$ on bigger instances of spreadsheets
-than $p$ may be expecting. For the variables $p$ doesn't know about, we'll
-keep the old instance's values.
-\begin{definition}
+If $k : \mlens{N}$ and $M$ is a spreadsheet type which is a superset of $N$,
+then it is possible for the put functions of $k$ to act on an instance $f$
+of $M$ even though $k.\mput$ is not well-define on all cells in $M$. 
+For the cells in $M \setminus N$, the extended put function is the identity.
+\begin{definition} Let $M$ and $N$ be spreadsheet types with $N \subset M$. 
+    Suppose $k : \mlens{N}$ is a lens, $i \in N$,
+    and $f$ is an instance of $M$. Define $\focus(k,i,f)$ to be a spreadsheet
+    instance of $M$ such that
     \begin{align*}
-        \focus(p,S,i,f,x) &= \cond{
-            p(i \cap S,f|_S,x) & x \in S \\
-            f(x) & x \notin S
+        \focus(k,i,f)(x) &= \cond{
+            k.\mput(i \cap N,f|_N)(x) & x \in N \\
+            f(x) & x \notin N
         }
     \end{align*}
 \end{definition}
+Notice that $\focus(k,i,f)$ is well-defined if and only if $i \cap N \not\in k.\danger$.
 
+Next, given two lenses $k$ and $\ell$ we will define a composition operation
+which enforces the invariants of both $k$ and $\ell$.
 \begin{definition}
-    Suppose $k : \mlens{N_k}$ and $\ell : \mlens{N_\ell}$ and $k.C \cap
-    \ell.C = \emptyset$. Denote their shared domain by $S=N_k \cap N_\ell$
-    and the total domains (including hidden variables) by $T_k=N_k \cup k.C$
-    and $T_\ell=N_\ell \cup \ell.C$. We define $k\mid\ell : \mlens{N_k \cup
-    N_\ell}$ as:
+    Suppose $k : \mlens{N_k}$ and $\ell : \mlens{N_\ell}$ such that $k.N' \cap
+    \ell.N' = \emptyset$. Let $S = N_k \cap N_\ell$ be the shared domain
+    of $k$ and $\ell$, and let $T_k = N_k \cup k.N$ and $T_\ell = N_\ell \cup \ell.N'$
+    be called the total domains (including existential variables) of $k$ and $\ell$.
+    Define $k\mid\ell : \mlens{N_k \cup N_\ell}$ as:
     \begin{align*}
-        C &= k.C \cup \ell.C \\
+        N' &= k.N' \cup \ell.N' \\
         \danger &= k.\danger \cup \ell.\danger \cup
             \{(d_k \cup d_\ell) \setminus S
             \mid d_k \in k.\danger, d_\ell \in \ell.\danger\} \\
         \mput(i) &= \cond{
-            \focus(\ell.\mput,T_\ell,i) \circ \focus(k.\mput,T_k,i)
-                & \mbox{ when possible} \\
-            \focus(k.\mput,T_k,i) \circ \focus(\ell.\mput,T_\ell,i)
+            \focus(\ell,i\cup S) \circ \focus(k,i)
+                & \mbox{ when well-defined} \\
+            \focus(k,i\cup S) \circ \focus(\ell,i)
                 & \mbox{ otherwise}
             } \\
         K(f) &= k.K(f|_{T_k}) \land \ell.K(f|_{T_\ell})
     \end{align*}
 \end{definition}
 
+\begin{lemma}
+    For all spreadsheet instances $f$ of $N_k \cup N_\ell$, and
+    for all $i \in N_k \cup N_\ell$ such that $i \not\in (k\mid\ell).\danger$,
+    $(k\mid\ell).\mput(i,f)$ is well-defined.
+\end{lemma}
+\begin{proof}
+    Suppose towards contradiction that both 
+    $\focus(\ell,i\cup S) \circ \focus(k,i)(f)$
+    and $\focus(k,i\cup S) \circ \focus(\ell,i)(f)$ are undefined. 
+    Then either
+    \begin{itemize}
+        \item $i \cap N_k \in k.\danger$,
+        \item $i \cap N_\ell \in \ell.\danger$, or
+        \item both $(i \cup S) \cap N_k \in k.\danger$ and $(i \cup S) \cap N_\ell \in \ell.\danger$ 
+    \end{itemize}
+    If $i \cap N_k \in k.\danger$, then $i \cap N_k \in (k\mid\ell).\danger$,
+    but since danger zones are upwards closed, $i \in (k\mid\ell).\danger$ as well.
+    Similarly, if $i \cap N_\ell \in \ell.\danger$ then $i \in (k\mid\ell).\danger$.
+    In the third case, we know that
+    \begin{align*}
+        d_k &= (i \cup S) \cap N_k = (i \cap N_k) \cup (N_\ell \setminus N_k) \in k.\danger \text{ and }\\
+        d_\ell &= (i \cup S) \cap N_\ell = (i \cap N_\ell) \cup (N_k \setminus N_\ell) \in \ell.\danger
+    \end{align*}
+    By the definition of $(k\mid\ell).\danger$, we know that
+    \begin{align*}
+        (d_k \cup d_\ell) \setminus S \in (k\mid\ell).\danger.
+    \end{align*}
+    Consider that
+    \begin{align*}
+        d_k \cup d_\ell &= (i \cap N_k) \cup (i \cap N_\ell) \cup (N_\ell \cap N_k) \\
+        (d_k \cup d_\ell) \setminus S &= ((i \cap N_k) \setminus S) \cup ((i \cap N_\ell) \setminus S) \\
+        &= (i \cap (N_k \setminus N_\ell)) \cup (i \cap (N_\ell \setminus N_k)) \\
+        &= i \cap ((N_k \setminus N_\ell) \cup (N_\ell \setminus N_k))
+    \end{align*}
+    But since this dangerous domain is a subset of $i$, $i$ is in the danger 
+    zone of $(k\mid\ell).\danger$ as well.
+\end{proof}
+
+Conjecture: If $D_k$ and $D_\ell$ are the danger zone representations of 
+    $k.\danger$ and $\ell.\danger$ respectively, where
+    $k:\mlens {N_k}$ and $\ell:\mlens {N_\ell}$, then 
+    \begin{align*}
+        &\upclose {D_k \cup D_\ell \cup \{(d_k \cup d_l) \setminus (N_k \cup N_\ell) \mid d_k \in D_k \text{ and } d_\ell \in D_\ell\}} 
+                {N_k \cup N_\ell} \\
+        = &\upclose {D_k} {N_k} \cup \upclose {D_\ell} {N_\ell} \cup 
+        \{(d_k \cup d_l) \setminus (N_k \cup N_\ell) \mid d_k \in \upclose{D_k} {N_k} 
+                                           \text{ and } d_\ell \in \upclose{D_\ell} {N_\ell}\}.
+    \end{align*}
+
+At times we will want to \emph{hide} or \emph{bind} a cell in a lens $k$, 
+meaning that we want to move it from the external domain of $k$ to the
+internal existential domain.
 \begin{definition}
     Given $\ell : \mlens N$ and $V \in N$, we define $\nu V.\ell : \mlens{N
-    \setminus \{V\}}$:
+    \setminus \{V\}}$, pronounced ``hide $V$ in $\ell$,'' as:
     \begin{align*}
-        C &= \ell.C \cup \{V\} \\
+        N' &= \ell.N' \cup \{V\} \\
         \danger &= \{d \mid d \in \ell.\danger \land V \notin d\} \\
         \mput &= \ell.\mput \\
         K &= \ell.K
     \end{align*}
 \end{definition}
 
+\begin{lemma}
+    Let $D$ be a danger zone representation of $\ell.\danger$ where
+    $\ell : \mlens N$. Let $V \in N$. Then 
+    \[ \upclose {\{d \mid d \in \ell.\danger \land V \notin d\}} {N\setminus\{V\}}
+        = \{ d \mid d \in \upclose {\ell.\danger} N \land V \notin d\}. \]
+\end{lemma}
+
 \begin{definition}
     Given $\ell : \mlens N$ and two names $V \in N$ and $W \notin N$, we can
     give the renaming $\ell[W/V]$:
     \begin{align*}
-        C &= \ell.C \\
+        N' &= \ell.N' \\
         \danger &= \{d[W/V] \mid d \in \ell.\danger\} \\
         \mput(i,f) &= \ell.\mput(i[V/W], f[V/W])[W/V] \\
         K(f) &= \ell.K(f[V/W])
     \end{align*}
 \end{definition}
 
-Constants in the program can be implemented with a lens like this one.
+\subsection{Primitive Lenses}
+
+
+\newcommand{\id}{\mathit{id}}
+\begin{definition}
+    The identity lens $\id : \mlens{\{A,B\}}$ is defined as follows:
+    \begin{align*}
+        N' &= \{\} \\
+        \danger &= AB \\
+        \mput(\{A\},f) &= f[B \mapsto f(A)] \\
+        \mput(\{B\},f) &= f[A \mapsto f(B)] \\
+        \mput(\{\},f) &= f[A \mapsto f(B)] \\
+        K(f) &= f(A) == f(B)
+    \end{align*}
+\end{definition} 
+
+For a value $t \in T$, we define a constant lens
+which enforces the invariant that a cell is always
+equal to $t$.
 
 \newcommand{\const}{\mathit{const}}
 \begin{definition}
-    If $t : T$ then $\const(t) : \mlens{\{A\}}$ is defined as:
+    If $t \in T$ then the constant lens
+    $\const(t) : \mlens{\{A\}}$ is defined as:
     \begin{align*}
-        C &= \{\} \\
+        N' &= \{\} \\
         \danger &= A \\
         \mput(i,f) &= \lambda v. t \\
-        K(f) &= f(A) = t
+        K(f) &= f(A) == t
     \end{align*}
 \end{definition}
 
