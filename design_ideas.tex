@@ -360,11 +360,14 @@ Notice that $\focus(k,i,f)$ is well-defined if and only if $i \cap N \not\in k.\
 Next, given two lenses $k$ and $\ell$ we will define a composition operation
 which enforces the invariants of both $k$ and $\ell$.
 \begin{definition}
-    Suppose $k : \mlens{N_k}$ and $\ell : \mlens{N_\ell}$ such that $k.N' \cap
-    \ell.N' = \emptyset$. Let $S = N_k \cap N_\ell$ be the shared domain
-    of $k$ and $\ell$, and let $T_k = N_k \cup k.N$ and $T_\ell = N_\ell \cup \ell.N'$
-    be called the total domains (including existential variables) of $k$ and $\ell$.
-    Define $k\mid\ell : \mlens{N_k \cup N_\ell}$ as:
+    Suppose $k : \mlens{N_k}$ and $\ell : \mlens{N_\ell}$ such that 
+    $T_k \cap T\ell = S$ where 
+    $T_k = N_k \cup k.N$ and $T_\ell = N_\ell \cup \ell.N'$ are
+    the total domains (including existential variables) of $k$ and $\ell$ 
+    and $S = N_k \cap N_\ell$ is the shared domain of $k$ and $\ell$.
+    (This is equivalent to requiring that $N_k \cap \ell.N' = \emptyset$,
+    $k.N' \cap N_\ell = \emptyset$ and $k.N' \cap \ell.N' = \emptyset$.)
+    Define $k\mid\ell : \mlens{N_k \cup N_\ell}$ to be:
     \begin{align*}
         N' &= k.N' \cup \ell.N' \\
         \danger &= k.\danger \cup \ell.\danger \cup
@@ -429,6 +432,33 @@ Conjecture: If $D_k$ and $D_\ell$ are the danger zone representations of
                                            \text{ and } d_\ell \in \upclose{D_\ell} {N_\ell}\}.
     \end{align*}
 
+In order to ensure that two lenses $k$ and $\ell$ have $k.D' \cap \ell.D' = \emptyset$,
+we must be able to rename hidden cell names in a lens.
+\begin{definition}
+    Let $\ell : \mlens N$ where $V \in \ell.N'$ and $W \notin N \cup \ell.N'$. 
+    Then the existential renaming $\ell\{W/V\} : \mlens N$ is
+    \begin{align*}
+        N' &= \{W\} \cup \ell.N' \setminus \{V\} \\
+        \danger &= \ell.\danger \\
+        \mput(i,f) &= \ell.\mput(i,f[V/w])[W/V] \\
+        K(f) &= \ell.K(f[V/W])
+    \end{align*}
+\end{definition}
+We can also define renaming on names in the lens's domain.
+\begin{definition}
+    Given $\ell : \mlens N$ and two names $V \in N$ and $W \notin N$, we can
+    give the renaming $\ell[W/V]$:
+    \begin{align*}
+        N' &= \ell.N' \\
+        \danger &= \{d[W/V] \mid d \in \ell.\danger\} \\
+        \mput(i,f) &= \ell.\mput(i[V/W], f[V/W])[W/V] \\
+        K(f) &= \ell.K(f[V/W])
+    \end{align*}
+\end{definition}
+\begin{lemma}
+    If $\ell\{W/V\}$ is well-defined, then $\ell\{W/V\} \equiv \ell$.
+\end{lemma}
+
 At times we will want to \emph{hide} or \emph{bind} a cell in a lens $k$, 
 meaning that we want to move it from the external domain of $k$ to the
 internal existential domain.
@@ -450,16 +480,41 @@ internal existential domain.
         = \{ d \mid d \in \upclose {\ell.\danger} N \land V \notin d\}. \]
 \end{lemma}
 
-\begin{definition}
-    Given $\ell : \mlens N$ and two names $V \in N$ and $W \notin N$, we can
-    give the renaming $\ell[W/V]$:
+\begin{lemma}
+    Let $k : \mlens {N_k}$ and $\ell : \mlens {N_\ell}$ such that $k.N' \cap \ell.N' = \emptyset$.
+    Let $V$ be name in $N_\ell$ such that $V \notin N_k \cup k.N'$.
+    Then $\nu V.(k \mid \ell) = k \mid (\nu V.\ell)$.
+\end{lemma}
+\begin{proof}
+    Follows from the definition of hiding and composition.
+    The domain of $\nu V.(k \mid \ell)$ is 
+    $(N_k \cup N_\ell) \setminus \{V\} = N_k \cup (N_\ell \setminus \{V\})$ 
+    since $V \notin N_k$, which is the domain of $k \mid (\nu V.\ell)$. 
+    For the existential domains we have that
     \begin{align*}
-        N' &= \ell.N' \\
-        \danger &= \{d[W/V] \mid d \in \ell.\danger\} \\
-        \mput(i,f) &= \ell.\mput(i[V/W], f[V/W])[W/V] \\
-        K(f) &= \ell.K(f[V/W])
+        (\nu V.(k \mid \ell)).N' &= (k.N' \cup \ell.N') \cup \{V\} \text{ and }\\
+        (k \mid (\nu V.\ell)).N' &= k.N' \cup (\ell.N' \cup \{V\})
     \end{align*}
-\end{definition}
+    For the danger zone,
+    \begin{align*}
+        (\nu V.(k \mid \ell)).\danger &= \{d \in (k \mid \ell).\danger \mid V \notin d \} \\
+        &= k.\danger \cup \{d \in \ell.\danger \mid V \notin d \} 
+        \cup \{(d_k \cup d_\ell) \setminus S \mid V \notin (d_k \cup d_\ell)\setminus S \}
+    \end{align*}
+    Since $V \notin d_k \subseteq N_k$, and also that $V \notin S$, we know that
+    $V \in (d_k \cup d_\ell) \setminus S$ if and only if $V \in d_\ell$. Therefore
+    \begin{align*}
+        (\nu V.(k \mid \ell)).\danger &= k.\danger \cup \{d \in \ell.\danger \mid V \notin d \}
+        \cup \{(d_k \cup d_\ell) \setminus S \mid d_k \in k.\danger, d_\ell \in \ell.\danger, V \notin d_\ell \} \\
+        &= k.\danger \cup (\nu V.\ell).\danger \cup \{(d_k \cup d_\ell) \setminus S \mid
+            d_k \in k.\danger, d\ell \in (\nu V.\ell).\danger \} \\
+        &= (k \mid \nu V.\ell).\danger
+    \end{align*}
+    Since hiding has no effect on put functions or consistency relations, 
+    this concludes the proof.
+\end{proof}
+
+
 
 \subsection{Primitive Lenses}
 
@@ -501,9 +556,6 @@ nondeterminism)
 Known false wish: $(k \mid \ell) \mid m \equiv k \mid (\ell \mid m)$
 (possible fixes: track more detailed information about put method
 interleavings, multiway composition, more restrictive danger zones)
-
-Conjecture: when $V \notin \mdomain k$, we have $\nu V. (k \mid \ell) \equiv
-k \mid \nu V. \ell$.
 
 Conjecture: when $k : A \lens B$ and $\ell : B \lens C$, we recover the
 symmetric lens' $k;\ell : A \lens C$ via our $\nu B.(k \mid \ell)$.

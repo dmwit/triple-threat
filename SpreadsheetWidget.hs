@@ -119,9 +119,11 @@ compose_
   ( Widget { domain = domk, existentials = exsk, invariant = invk, danger = dzk, methods = fk })
   ( Widget { domain = doml, existentials = exsl, invariant = invl, danger = dzl, methods = fl })
   = Widget { domain = dom , existentials = exs , invariant = inv , danger = dz , methods = f  } where
-  dom        = Set.union domk doml
-  exs        = Set.union exsk exsl -- disjoint union
-  inv vals = invk (restrictDom vals domk) && invl (restrictDom vals doml)
+  dom      = Set.union domk doml
+  exs      = Set.union exsk exsl -- disjoint union
+  totk     = domk `Set.union` exsk
+  totl     = doml `Set.union` exsl
+  inv vals = invk (restrictDom vals totk) && invl (restrictDom vals totl)
   shared   = domk `Set.intersection` doml
   dz       = minimizeDangerZone (dzk `Set.union` dzl `Set.union` Set.fromList
                                    [ (vk `Set.union` vl) `Set.difference` shared
@@ -133,15 +135,18 @@ compose_
     lIn = Set.intersection inputs doml
     kInShared = Set.union kIn shared
     lInShared = Set.union lIn shared
+    zeros = Map.fromList $ Set.fold (\x ls -> (x,0):ls) [] dom
 
     canRunKFirst   = safe dzk kIn && safe dzl lInShared
     runKFirst vals = let
-      vals_runk = fk kIn vals
-      vals_runl = fl lInShared (vals_runk `Map.union` vals)
+      fill_vals = vals `Map.union` zeros
+      vals_runk = fk kIn fill_vals
+      vals_runl = fl lInShared (vals_runk `Map.union` fill_vals)
       in vals_runl `Map.union` vals_runk
     runLFirst vals = let
-      vals_runl = fl lIn vals
-      vals_runk = fk kInShared (vals_runl `Map.union` vals)
+      fill_vals = vals `Map.union` zeros
+      vals_runl = fl lIn fill_vals
+      vals_runk = fk kInShared (vals_runl `Map.union` fill_vals)
       in vals_runk `Map.union` vals_runl
 
 -------------------------------------------------------------------------
@@ -164,22 +169,24 @@ hide c w =
 renameCell :: CellName -> CellName -> Widget -> Widget
 renameCell n1 n2 w = 
   if not (Set.member n1 $ domain w) then w
-  else w {domain = dom, danger = dz, methods = f} where
+  else w {domain = dom, invariant = inv, danger = dz, methods = f} where
     changeDom d = Set.insert n2 (Set.delete n1 d)
     changeVals n1 n2 vals = 
       Map.delete n1 $ Map.alter (\ _ -> Map.lookup n1 vals) n2 vals 
     dom      = changeDom (domain w)
+    inv      = invariant w (changeVals n2 n1 vals)
     dz       = Set.map changeDom (danger w)
     f i vals = changeVals n1 n2 $ (methods w) i (changeVals n2 n1 vals)
   
 renameExistential :: CellName -> CellName -> Widget -> Widget
 renameExistential n1 n2 w =
   if not (Set.member n1 $ existentials w) then w 
-  else w {existentials = exs, methods = f} where
+  else w {existentials = exs, invariant = inv, methods = f} where
     change d = Set.insert n2 (Set.delete n1 d)
     changeVals n1 n2 vals =
       Map.delete n1 $ Map.alter (\_ -> Map.lookup n1 vals) n2 vals
     exs      = change (existentials w)
+    inv vals = invariant w (changeVals n2 n1 vals)
     f i vals = changeVals n1 n2 $ (methods w) i (changeVals n2 n1 vals)
 
 rename :: [(CellName,CellName)] -> Widget -> Widget
@@ -241,7 +248,7 @@ getMethods eqns dom vals =
 
     
 instance Parseable [Relation] where
-  parser = sepBy parser (string ", ")
+  parser = sepBy parser (string ",\n")
 
 instance Parseable Relation where
   parser = do
