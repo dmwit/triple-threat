@@ -174,7 +174,7 @@ renameCell n1 n2 w =
     changeVals n1 n2 vals = 
       Map.delete n1 $ Map.alter (\ _ -> Map.lookup n1 vals) n2 vals 
     dom      = changeDom (domain w)
-    inv      = invariant w (changeVals n2 n1 vals)
+    inv vals = invariant w (changeVals n2 n1 vals)
     dz       = Set.map changeDom (danger w)
     f i vals = changeVals n1 n2 $ (methods w) i (changeVals n2 n1 vals)
   
