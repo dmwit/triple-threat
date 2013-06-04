@@ -1,23 +1,28 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, TupleSections #-}
 module SpreadsheetWidget where
 
-import SpreadsheetCommon
 import GetPut
-import Data.Map (Map)
-import Data.Set (Set)
-import System.Environment
-import System.IO
+import SpreadsheetCommon
+import UpwardClosedSet (UpwardClosedSet)
 
 import Control.Applicative
+import Data.List.Split
+import Data.Map (Map)
+import Data.Set (Set)
+import Debug.Trace
+import System.Environment
+import System.IO
+import Text.Parsec hiding (many, optional, (<|>))
+
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.List as List
 import qualified Data.Maybe as Maybe
-import Text.Parsec hiding (many, optional, (<|>))
+import qualified UpwardClosedSet as Rep
 
 type CellDomain = Set CellName
-type DangerZone = Set CellDomain
-type Method     = SpreadsheetValues -> SpreadsheetValues
+type DangerZone = UpwardClosedSet CellName
+type Method     = SpreadsheetValues -> [SpreadsheetValues]
 type Invariant  = SpreadsheetValues -> Bool
 
 data Widget = Widget
@@ -50,7 +55,7 @@ defaultWidget = Widget { domain = dom, existentials = exs, invariant = inv, dang
   exs = Set.empty
   inv = \ _ -> True
   dz  = Set.empty
-  m   = \ _ -> id
+  m   = \ _ -> return
 
 -----------------------------------------------------------------
 ------------------- Pretty Printer ------------------------------
@@ -74,81 +79,64 @@ instance PPrint Spreadsheet where
 
 -------------------------------------------------------------------------
 ----------------------------- Composition -------------------------------
-  
+
 restrictDom :: SpreadsheetValues -> CellDomain -> SpreadsheetValues
 restrictDom vals dom = -- Map.intersection vals . Map.fromSet (const ())
   Map.filterWithKey (\ s _ -> Set.member s dom) vals
 
-safe, dangerous :: DangerZone -> CellDomain -> Bool
-safe = (not .) . dangerous
-dangerous rep s = any (`Set.isSubsetOf` s) (Set.toList rep)
+composeAll :: [Widget] -> Widget
+composeAll = composeAll_ . renameAll
 
--- Minimize the representation of a danger zone.
--- Given a representation rep, this function attempts to produce a smaller
--- representation rep' such that dangerous rep = dangerous rep'. At the moment,
--- it does this only by iterating one rule: remove any sets of names which are
--- proper supersets of another set of names in the representation. To be
--- complete, we would probably also need a rule that said something like "If
--- all of the sets of names S U {x} for x in the domain of the lens are in the
--- representation, replace them with the single set S.". We don't try to do
--- that yet.
-minimizeDangerZone x = Set.filter (\s -> and [not (Set.isProperSubsetOf s' s) | s' <- Set.toList x]) x
+renameAll :: [Widget] -> [Widget]
+renameAll ws = zipWith rename nameMaps ws where
+  domains     = map (Set.toList . domain) ws
+  domainNames = Set.unions (map domain ws)
+  allNames    = [1..] >>= flip replicateM ['a'..'z']
+  freshNames  = allNames \\ Set.toList domainNames
+  nameMaps    = zipWith zip domains (splitPlacesBlanks (map length domains) freshNames)
+
+composeAll_ :: [Widget] -> Widget
+composeAll_ ws = Widget
+  { domain       = Set.unions (map domain ws)
+  , existentials = Set.unions (map existentials ws)
+  , invariant    = \v -> all (\w -> invariant w (restrictDom v (domain w))) ws
+  , danger       = Rep.intersections
+    [ Rep.unions
+       [ Rep.assume (Set.unions (map domain b)) (danger e)
+       | (b, e:_) <- zip (inits order) (tails order)
+       ] -- TODO: can probably be more efficient with a scanl, if that matters
+    | order <- permutations ws
+    ]
+  , methods      = \d v -> do
+    order <- permutations ws
+    guard (canRun d order)
+    snd <$> foldM step (d, v) order
+  } where
+  enlarge d w = Set.union d (domain w)
+  canRun d ws = and $ zipWith Rep.notMember (scanl enlarge d ws) (map danger ws)
+  step (d, v) w = (enlarge d w,) <$> methods w d v
+
+compose :: Widget -> Widget -> Widget
+compose w1 w2 = composeAll [w1, w2]
 
 composeSheet :: Spreadsheet -> Spreadsheet -> Spreadsheet
 composeSheet 
   (Spreadsheet { widget = wk, locked = lk, values = valsk })
   (Spreadsheet { widget = wl, locked = ll, values = valsl })
-  = Spreadsheet { widget = w, locked = l, values = step w vals Map.empty} where
+  = errorMessage Spreadsheet { widget = w, locked = l, values = deterministicVals} where
     w = compose wk wl
     l = Set.union lk ll
-    vals = Map.union valsk valsl -- should run put after this, maybe?
+    vals = Map.union valsk valsl
+    nondeterministicVals = step w vals Map.empty
+    deterministicVals = case nondeterministicVals of
+      [] -> error "running put in composeSheet resulted in no outputs!"
+      (x:_) -> x
+    errorMessage = case nondeterministicVals of
+      [] -> error "running put in composeSheet resulted in no outputs!"
+      choices@(x:_:_) -> trace $ "running put in composeSheet resulted in multiple outputs:\n" ++ unlines (map pprint choices) ++ "\nArbitrarily choosing\n" ++ pprint x
+      _ -> id
 
-
-compose :: Widget -> Widget -> Widget
-compose w1 w2 = compose_ w1' w2' where
-  left  n = "l_" ++ n
-  right n = "r_" ++ n
-  exs1    = Set.elems $ existentials w1
-  w1'     = rename (zip exs1 (map left exs1)) w1
-  exs2    = Set.elems $ existentials w2
-  w2'     = rename (zip exs2 (map right exs2)) w2
-  
-    
-compose_ :: Widget -> Widget -> Widget
-compose_
-  ( Widget { domain = domk, existentials = exsk, invariant = invk, danger = dzk, methods = fk })
-  ( Widget { domain = doml, existentials = exsl, invariant = invl, danger = dzl, methods = fl })
-  = Widget { domain = dom , existentials = exs , invariant = inv , danger = dz , methods = f  } where
-  dom      = Set.union domk doml
-  exs      = Set.union exsk exsl -- disjoint union
-  totk     = domk `Set.union` exsk
-  totl     = doml `Set.union` exsl
-  inv vals = invk (restrictDom vals totk) && invl (restrictDom vals totl)
-  shared   = domk `Set.intersection` doml
-  dz       = minimizeDangerZone (dzk `Set.union` dzl `Set.union` Set.fromList
-                                   [ (vk `Set.union` vl) `Set.difference` shared
-                                   | vk <- Set.toList dzk
-                                   , vl <- Set.toList dzl
-                                   ])
-  f inputs = if canRunKFirst then runKFirst else runLFirst where
-    kIn = Set.intersection inputs domk
-    lIn = Set.intersection inputs doml
-    kInShared = Set.union kIn shared
-    lInShared = Set.union lIn shared
-    zeros = Map.fromList $ Set.fold (\x ls -> (x,0):ls) [] dom
-
-    canRunKFirst   = safe dzk kIn && safe dzl lInShared
-    runKFirst vals = let
-      fill_vals = vals `Map.union` zeros
-      vals_runk = fk kIn fill_vals
-      vals_runl = fl lInShared (vals_runk `Map.union` fill_vals)
-      in vals_runl `Map.union` vals_runk
-    runLFirst vals = let
-      fill_vals = vals `Map.union` zeros
-      vals_runl = fl lIn fill_vals
-      vals_runk = fk kInShared (vals_runl `Map.union` fill_vals)
-      in vals_runk `Map.union` vals_runl
-
+{-
 -------------------------------------------------------------------------
 ----------------------------- Hide --------------------------------------
 
@@ -156,12 +144,11 @@ hide :: CellName -> Widget -> Widget
 hide c w =
   if not (Set.member c $ domain w) 
   then w
-  else Widget { domain = Set.delete c (domain w)
-              , existentials = Set.insert c (existentials w)
-              , invariant = invariant w 
-              , danger = Set.filter (\s -> not $ Set.member c s) (danger w)
-              , methods = methods w }
-
+  else w { domain = Set.delete c (domain w)
+         , existentials = Set.insert c (existentials w)
+         , danger = Set.filter (\s -> not $ Set.member c s) (danger w)
+         }
+-}
 -------------------------------------------------------------------------
 -------------------------------- Rename ---------------------------------
 
@@ -176,7 +163,7 @@ renameCell n1 n2 w =
     dom      = changeDom (domain w)
     inv vals = invariant w (changeVals n2 n1 vals)
     dz       = Set.map changeDom (danger w)
-    f i vals = changeVals n1 n2 $ (methods w) i (changeVals n2 n1 vals)
+    f i vals = changeVals n1 n2 <$> (methods w) i (changeVals n2 n1 vals)
   
 renameExistential :: CellName -> CellName -> Widget -> Widget
 renameExistential n1 n2 w =
@@ -187,7 +174,7 @@ renameExistential n1 n2 w =
       Map.delete n1 $ Map.alter (\_ -> Map.lookup n1 vals) n2 vals
     exs      = change (existentials w)
     inv vals = invariant w (changeVals n2 n1 vals)
-    f i vals = changeVals n1 n2 $ (methods w) i (changeVals n2 n1 vals)
+    f i vals = changeVals n1 n2 <$> (methods w) i (changeVals n2 n1 vals)
 
 rename :: [(CellName,CellName)] -> Widget -> Widget
 rename ls w   = foldr g w ls where
@@ -196,20 +183,17 @@ rename ls w   = foldr g w ls where
                 else if Set.member n1 (existentials w)
                      then renameExistential n1 n2 w
                      else w
-
 -------------------------------------------------------------------------
 --------------------------------- Step ----------------------------------
 
-step :: Widget -> SpreadsheetValues -> SpreadsheetValues -> SpreadsheetValues
+step :: Widget -> SpreadsheetValues -> SpreadsheetValues -> [SpreadsheetValues]
 step w vals input =
   let i = Map.keysSet input in
-  if dangerous (danger w) i || (not $ Set.isSubsetOf i (domain w)) 
-  then vals
-  else 
-    let zeros dom = Set.fold g Map.empty dom where
-          g cell vals = Map.insert cell 0 vals
-    in (methods w) i (Map.union input vals) `Map.union` zeros (domain w)
+  if Rep.member i (danger w) || (not $ Set.isSubsetOf i (domain w)) 
+  then [vals]
+  else methods w i (Map.union input vals)
 
+{-
 stepSheet :: Spreadsheet -> SpreadsheetValues -> Spreadsheet
 stepSheet sheet input = 
   let locked_vals = restrictDom (values sheet) (locked sheet) in
@@ -295,7 +279,7 @@ setValueLoop w s = do
     [] -> setValueLoop w (step w s Map.empty)
     _  -> 
       let dom = Set.fromList cellNames in
-      if dangerous (danger w) dom || (not $ Set.isSubsetOf dom (domain w))
+      if Rep.member dom (danger w) || (not $ Set.isSubsetOf dom (domain w))
       then putStrLn "That domain is dangerous!" >> setValueLoop w s
       else do
            cellValues <- prompt "Change values to: "
@@ -307,3 +291,4 @@ setValueLoop w s = do
                | otherwise -> setValueLoop w (step w s (Map.fromList (zip cellNames cellValues)))
 
   
+-}
