@@ -6,7 +6,7 @@ import SpreadsheetCommon
 import UpwardClosedSet (UpwardClosedSet)
 
 import Control.Applicative
-import Data.List.Split
+import Data.List.Split hiding (sepBy)
 import Data.Map (Map)
 import Data.Set (Set)
 import Debug.Trace
@@ -119,6 +119,7 @@ composeAll_ ws = Widget
 compose :: Widget -> Widget -> Widget
 compose w1 w2 = composeAll [w1, w2]
 
+-- TODO: is this used anywhere? if not, let's delete it
 composeSheet :: Spreadsheet -> Spreadsheet -> Spreadsheet
 composeSheet 
   (Spreadsheet { widget = wk, locked = lk, values = valsk })
@@ -136,7 +137,6 @@ composeSheet
       choices@(x:_:_) -> trace $ "running put in composeSheet resulted in multiple outputs:\n" ++ unlines (map pprint choices) ++ "\nArbitrarily choosing\n" ++ pprint x
       _ -> id
 
-{-
 -------------------------------------------------------------------------
 ----------------------------- Hide --------------------------------------
 
@@ -148,7 +148,6 @@ hide c w =
          , existentials = Set.insert c (existentials w)
          , danger = Set.filter (\s -> not $ Set.member c s) (danger w)
          }
--}
 -------------------------------------------------------------------------
 -------------------------------- Rename ---------------------------------
 
@@ -193,13 +192,12 @@ step w vals input =
   then [vals]
   else methods w i (Map.union input vals)
 
-{-
-stepSheet :: Spreadsheet -> SpreadsheetValues -> Spreadsheet
+stepSheet :: Spreadsheet -> SpreadsheetValues -> [Spreadsheet]
 stepSheet sheet input = 
   let locked_vals = restrictDom (values sheet) (locked sheet) in
   let input' = Map.union locked_vals input in
   let vals = step (widget sheet) (values sheet) input' in
-  sheet {values = vals}
+  [sheet {values = val} | val <- vals]
 
 -----------------------------------------------------------------
 --------------------- RelationWidget to Widgets -----------------
@@ -223,7 +221,7 @@ getMethods eqns dom vals =
   let new_vals = Set.fold g Map.empty dom_eqns where
         g (Equation target f) new = Map.insert target (cell_get f vals') new
   in
-   Map.union new_vals vals'
+   [Map.union new_vals vals']
 
 
 
@@ -267,10 +265,11 @@ prompt s = do
   putStr s
   hFlush stdout
   getLine
-  
+
+readsWords :: Read a => String -> [[a]]
 readsWords = mapM noJunk . words where
   noJunk s = [v | (v, "") <- reads s]
-    
+{- TODO: delete?
 setValueLoop w s = do
   putStrLn (pprint s)
   putStrLn ("Satisfies Invariant: " ++ (show $ invariant w s) ++ "\n")
@@ -289,6 +288,4 @@ setValueLoop w s = do
                | length cellValues /= length cellNames -> 
                  putStrLn "Please give as many values as you gave names." >> setValueLoop w s
                | otherwise -> setValueLoop w (step w s (Map.fromList (zip cellNames cellValues)))
-
-  
 -}

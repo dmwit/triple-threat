@@ -1,6 +1,6 @@
 module WidgetLib where
 
---import Data.Default
+import Data.Default
 import System.Environment
 import Data.Map hiding (map)
 import Data.Maybe
@@ -16,12 +16,11 @@ import qualified Data.Maybe as Maybe
 import qualified Data.List as List
 import qualified Control.Monad as M
 import qualified Control.Monad.State as S
+import qualified UpwardClosedSet as Rep
 
-
-generateSpreadsheet :: Widget -> Spreadsheet
-generateSpreadsheet w = 
-  let vals = step w Map.empty Map.empty in
-  Spreadsheet { widget = w, locked = Set.empty, values = vals }
+generateSpreadsheet :: Widget -> [Spreadsheet]
+generateSpreadsheet w =
+  [Spreadsheet { widget = w, locked = def, values = val } | val <- step w def def]
 
 -- internal cells will be called xn for some integer n
           
@@ -63,9 +62,13 @@ compile r = --fst $ S.runState (compileRelation r) 0
                   
 --------------------------------------------------------------------------
 
-idMethods :: CellName -> CellName -> DangerZone -> Invariant -> CellDomain -> Method
+type DeterministicMethod = SpreadsheetValues -> SpreadsheetValues
+deterministic :: (CellDomain -> DeterministicMethod) -> (CellDomain -> Method)
+deterministic f i v = [f i v]
+
+idMethods :: CellName -> CellName -> DangerZone -> Invariant -> CellDomain -> DeterministicMethod
 idMethods aName bName dz inv i vals
-  | dangerous dz i           = vals
+  | Rep.member i dz          = vals
   | inv vals                 = vals
   | i == Set.singleton bName = Map.insert aName bVal vals
   | otherwise                = Map.insert bName aVal vals
@@ -81,17 +84,16 @@ idWidget a b =
       [va,vb] <- mapM (`lookup` vals) [a,b]
       return (va == vb)
     dz = Set.singleton dom
-    m = idMethods a b dz inv
-  
+    m = deterministic $ idMethods a b dz inv
 
 opMethods :: Op -> CellName -> CellName -> CellName -> 
-             DangerZone -> Invariant -> CellDomain -> Method
+             DangerZone -> Invariant -> CellDomain -> DeterministicMethod
 opMethods (Infix Plus)  = plusMethods
 opMethods (Infix Minus) = minusMethods
 opMethods (Infix Times) = timesMethods
 opMethods (Infix Div)   = divMethods
 opMethods (Infix Pow)   = powMethods
-    
+
 opWidget :: Op -> CellName -> CellName -> CellName -> Widget
 opWidget o c a b =
   Widget { domain = dom, existentials = exs, invariant = inv, danger = dz, methods = m } where
@@ -101,8 +103,7 @@ opWidget o c a b =
       [va,vb,vc] <- mapM (`lookup` vals) [a, b, c]
       return (vc == (op o) va vb)
     dz = Set.singleton dom
-    m = opMethods o c a b dz inv
-    
+    m = deterministic $ opMethods o c a b dz inv
 plusWidget = opWidget (Infix Plus) 
 minusWidget = opWidget (Infix Minus)
 timesWidget = opWidget (Infix Times)
@@ -112,9 +113,9 @@ powWidget = opWidget (Infix Pow)
 -------------------------------------------------------------
 
 plusMethods :: CellName -> CellName -> CellName -> 
-               DangerZone -> Invariant -> CellDomain -> Method
+               DangerZone -> Invariant -> CellDomain -> DeterministicMethod
 plusMethods cName aName bName dz inv i vals
-  | dangerous dz i = vals
+  | Rep.member i dz = vals
   | inv vals                        = vals
   | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
   | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
@@ -130,9 +131,9 @@ plusMethods cName aName bName dz inv i vals
     bNew = if cComputed == 0 then cIn / 2 else cIn * bIn / cComputed
 
 minusMethods :: CellName -> CellName -> CellName -> 
-                DangerZone -> Invariant -> CellDomain -> Method
+                DangerZone -> Invariant -> CellDomain -> DeterministicMethod
 minusMethods cName aName bName dz inv i vals
-  | dangerous dz i = vals
+  | Rep.member i dz = vals
   | inv vals                        = vals
   | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
   | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
@@ -148,9 +149,9 @@ minusMethods cName aName bName dz inv i vals
     bNew = if cComputed == 0 then cIn / 2 else cIn * bIn / cComputed
 
 timesMethods :: CellName -> CellName -> CellName -> 
-                DangerZone -> Invariant -> CellDomain -> Method
+                DangerZone -> Invariant -> CellDomain -> DeterministicMethod
 timesMethods cName aName bName dz inv i vals
-  | dangerous dz i = vals
+  | Rep.member i dz = vals
   | inv vals                        = vals
   | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
   | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
@@ -172,9 +173,9 @@ timesMethods cName aName bName dz inv i vals
       else aIn * sqrtC / sqrtCComputed
            
 divMethods :: CellName -> CellName -> CellName -> 
-                DangerZone -> Invariant -> CellDomain -> Method
+                DangerZone -> Invariant -> CellDomain -> DeterministicMethod
 divMethods cName aName bName dz inv i vals
-  | dangerous dz i                  = vals
+  | Rep.member i dz                 = vals
   | inv vals                        = vals
   | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
   | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
@@ -193,9 +194,9 @@ divMethods cName aName bName dz inv i vals
            else bIn * cComputed
 
 powMethods :: CellName -> CellName -> CellName ->
-              DangerZone -> Invariant -> CellDomain -> Method
+              DangerZone -> Invariant -> CellDomain -> DeterministicMethod
 powMethods cName aName bName dz inv i vals
-  | dangerous dz i = vals
+  | Rep.member i dz = vals
   | inv vals = vals
   | i == Set.fromList [bName,cName] = Map.insert aName aComputed vals
   | i == Set.fromList [aName,cName] = Map.insert bName bComputed vals
@@ -205,7 +206,7 @@ powMethods cName aName bName dz inv i vals
     [aIn,bIn,cIn] = map getVal [aName,bName,cName]
     getVal name = Maybe.fromMaybe 0 $ Map.lookup name vals
     aComputed = cIn ** (1 / bIn)
-    bComputed = (log cIn) / (log aIn)
+    bComputed = logBase aIn cIn
     aNew = if aIn == 1 || aIn == 0 then cIn
            else aIn
     bNew = if aIn == 1 || aIn == 0 then 1
@@ -221,22 +222,33 @@ constWidget n t = Widget
   , existentials = Set.empty
   , invariant    = \v -> Map.lookup n v == Just t
   , danger       = Set.singleton (Set.singleton n)
-  , methods      = \_ v -> Map.insert n t v
+  , methods      = \_ v -> [Map.insert n t v]
   }
-
 
 -------------------------------------------------------------------
 ------------------------------- parser ----------------------------
+
+loopMany s = case s of
+  []       -> putStrLn "The impossible happened! Our nondeterministic widgets returned no results."
+  [s]      -> loop s
+  ss@(s:_) -> do
+    putStrLn "There are many possible ways to update the spreadsheet."
+    forM_ (zip [1..] ss) $ \(i, s) -> do
+      putStr "Choice "
+      print i
+      putStrLn (pprint s ++ "\n")
+    putStrLn "Arbitrary choosing the first one."
+    loop s
 
 loop s = do
   putStrLn (pprint s)
   putStrLn ("Satisfies Invariant: " ++ (show $ invariant (widget s) (values s)) ++ "\n")
   choice <- prompt "Lock cells (l), Unlock cells (u), or change cells (c)? "
-  if choice == "l" then lockCells s
-    else if choice == "u" then unlockCells s
-         else if choice == "c" then changeCells s
-              else putStrLn "Please choose either (l), (u) or (c)." >> loop s
-                   
+  case choice of
+    "l" -> lockCells s
+    "u" -> unlockCells s
+    "c" -> putStrLn "Please choose either (l), (u) or (c)." >> loop s
+
 lockCells s = do
   cellNames <- words <$> prompt "Lock cells: "
   let dom = Set.fromList cellNames in
@@ -260,7 +272,7 @@ unlockCells s = do
 changeCells s = do
   cellNames <- words <$> prompt "Change cells: "
   case cellNames of
-    [] -> loop (stepSheet s Map.empty)
+    [] -> loopMany (stepSheet s Map.empty)
     _  -> 
       let w   = widget s in
       let dom = Set.fromList cellNames in
@@ -268,7 +280,7 @@ changeCells s = do
       then putStrLn ("That domain is locked.") >> loop s
       else
         let l = dom `Set.union` locked s in
-        if dangerous (danger w) l || (not $ Set.isSubsetOf l (domain w))
+        if Rep.member l (danger w) || (not $ Set.isSubsetOf l (domain w))
         then putStrLn ("That domain (" ++ pprint l ++ ") is dangerous!") >> loop s
         else do
           cellValues <- prompt "Change values to: "
@@ -277,7 +289,7 @@ changeCells s = do
             cellValues:_
               | length cellValues /= length cellNames -> 
                 putStrLn "Please give as many values as you gave names." >> loop s
-              | otherwise -> loop (stepSheet s (Map.fromList (zip cellNames cellValues)))
+              | otherwise -> loopMany (stepSheet s (Map.fromList (zip cellNames cellValues)))
                               
 main = do
   a <- getArgs
@@ -291,5 +303,5 @@ main = do
                 g w r = compose w (compile r)
           in do
             putStrLn (pprint l)
-            loop $ generateSpreadsheet w
+            loopMany $ generateSpreadsheet w
     _ -> putStrLn "Call with one argument naming a file with a relation."
