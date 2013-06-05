@@ -6,9 +6,12 @@
 \newcommand{\lens}{\leftrightarrow}
 \newcommand{\slens}{\lens_s}
 \newcommand{\R}{\mathbb R}
+\newcommand{\cupdot}{\mathbin{\mathaccent\cdot\cup}}
+\newcommand{\capdot}{\mathbin{\mathaccent\cdot\cap}}
 \newtheorem{theorem}{Theorem}
 \newtheorem{lemma}{Lemma}
 \newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
 \begin{document}
 The goal is to take the theme ``bidirectional spreadsheet'' and run with it.
 In particular we'd like to design something that would be helpful to
@@ -281,6 +284,7 @@ $T$ a set of spreadsheet values like numbers or strings.
         \item $\left.\mput(i,f)\right|_i = \left.f\right|_i$
     \end{itemize}
 \end{definition}
+When $i \notin \danger$ we say that $\mput(i,f)$ is \emph{well-scoped}.
 
 \newcommand{\mdomain}[1]{\mathit{dom}(#1)}
 \begin{definition}
@@ -307,9 +311,9 @@ which need not be equal.
       g' \mathrel R h'. \]
 \end{definition}
 
-\begin{lemma}
+\begin{proposition}
     $\equiv$ is an equivalence relation.
-\end{lemma}
+\end{proposition}
 
 The size of upward-closed elements of $2^{2^N}$ makes storing danger zones
 in an implementation impractical. Instead, we use a compact representation
@@ -318,23 +322,31 @@ spans the entire set.
 
 \newcommand{\upclose}[2]{\llbracket #1 \rrbracket_{#2}}
 \begin{definition}
-    The \emph{upward closure} $\upclose VN$ of $V$ in $N$ is:
-    \[S \in \upclose VN \iff \exists v \in V. v \subset S \subset N\]
+    The \emph{upward closure} $\upclose VU$ of $V$ in $U$ is:
+    \[S \in \upclose VU \iff \exists v \in V. v \subset S \subset U\]
 \end{definition}
 
-\begin{lemma}
+\begin{proposition}
     Upward closures are upward closed.
-\end{lemma}
+\end{proposition}
 
-When a set of names $N$ is understood, we will use the notation
-$E_{11}\cdots E_{1n_1},\cdots,E_{m1}\cdots E_{mn_m}$ as shorthand for
+
+When a universe of names $U$ is understood, we will use the notation
+\[E_{11}\cdots E_{1n_1},\cdots,E_{m1}\cdots E_{mn_m}\] 
+as shorthand for
 \[\upclose{\{\{E_{11},\cdots,E_{1n_1}\},\cdots,\{E_{m1},\cdots,E_{mn_m}\}\}}N.\]
 For example, $AB,AC$ stands for $\{\{A,B\},\{A,C\},\{A,B,C\}\}$. In the definitions
-below, we present $\danger$ using compact representations. We will find
-that, to produce a new danger zone $\danger$, lens combinators can
-equivalently use their sublenses's full upward closures or
-compact representations.
-
+below, we present $\danger$ using compact representations. For the lens
+combinators in the following section, we construct danger zone 
+representations from the representations of the sublenses. We define
+union $\cupdot$ and intersection $\capdot$ operators over representations as 
+\begin{align*}
+    P \cupdot Q &= \{ t \mid t \in P \text{ or } t \in Q \} \\
+    P \capdot Q &= \{ p \cup q \mid p \in P \text{ and } q \in Q \}
+\end{align*}
+so that $\upclose{R \cupdot S} U = \upclose{R} U \cup \upclose{S} U$ and
+$\upclose{R \capdot S} U = \upclose{R} U \cap \upclose{S} U$.
+ 
 \subsection{Combinators}
 
 \newcommand{\cond}[1]{\left\{\begin{array}{ll}#1\end{array}\right.}
@@ -342,10 +354,10 @@ compact representations.
 \newcommand{\focus}{\mathit{focus}}
 If $k : \mlens{N}$ and $M$ is a spreadsheet type which is a superset of $N$,
 then it is possible for the put functions of $k$ to act on an instance $f$
-of $M$ even though $k.\mput$ is not well-define on all cells in $M$. 
+of $M$ even though $k.\mput$ is not well-defined on all cells in $M$. 
 For the cells in $M \setminus N$, the extended put function is the identity.
 \begin{definition} Let $M$ and $N$ be spreadsheet types with $N \subset M$. 
-    Suppose $k : \mlens{N}$ is a lens, $i \in N$,
+    Suppose $k : \mlens{N}$ is a lens, $i \in M$,
     and $f$ is an instance of $M$. Define $\focus(k,i,f)$ to be a spreadsheet
     instance of $M$ such that
     \begin{align*}
@@ -355,19 +367,17 @@ For the cells in $M \setminus N$, the extended put function is the identity.
         }
     \end{align*}
 \end{definition}
-Notice that $\focus(k,i,f)$ is well-defined if and only if $i \cap N \not\in k.\danger$.
+Notice that $\focus(k,i,f)$ is well-scoped if and only if $i \cap N \not\in k.\danger$.
 
 Next, given two lenses $k$ and $\ell$ we will define a composition operation
 which enforces the invariants of both $k$ and $\ell$.
 \begin{definition}
     Suppose $k : \mlens{N_k}$ and $\ell : \mlens{N_\ell}$ such that 
-    $T_k \cap T\ell = S$ where 
-    $T_k = N_k \cup k.N$ and $T_\ell = N_\ell \cup \ell.N'$ are
-    the total domains (including existential variables) of $k$ and $\ell$ 
-    and $S = N_k \cap N_\ell$ is the shared domain of $k$ and $\ell$.
-    (This is equivalent to requiring that $N_k \cap \ell.N' = \emptyset$,
-    $k.N' \cap N_\ell = \emptyset$ and $k.N' \cap \ell.N' = \emptyset$.)
-    Define $k\mid\ell : \mlens{N_k \cup N_\ell}$ to be:
+    \[N_k \perp \ell.N' \perp k.N' \perp N_\ell,\]
+    that is, $N_k \cap \ell.N' = \emptyset$, $\ell.N' \cap k.N' = \emptyset$,
+    and $k.N' \cap N_\ell = \emptyset$. Let $T_k = N_k \cap k.N'$ and $T_\ell = N_\ell \cap \ell.N'$,
+    and define $S = N_k \cap N_\ell$.
+    Then the composition $k\mid\ell : \mlens{N_k \cup N_\ell}$ of $k$ and $\ell$ is
     \begin{align*}
         N' &= k.N' \cup \ell.N' \\
         \danger &= k.\danger \cup \ell.\danger \cup
@@ -375,7 +385,7 @@ which enforces the invariants of both $k$ and $\ell$.
             \mid d_k \in k.\danger, d_\ell \in \ell.\danger\} \\
         \mput(i) &= \cond{
             \focus(\ell,i\cup S) \circ \focus(k,i)
-                & \mbox{ when well-defined} \\
+                & \mbox{ when well-scoped} \\
             \focus(k,i\cup S) \circ \focus(\ell,i)
                 & \mbox{ otherwise}
             } \\
@@ -383,19 +393,21 @@ which enforces the invariants of both $k$ and $\ell$.
     \end{align*}
 \end{definition}
 
-\begin{lemma}
-    For all spreadsheet instances $f$ of $N_k \cup N_\ell$, and
+\begin{proposition}
+    For all spreadsheet instances $f$ of $(N_k \cup N_\ell) \cup (k.N' \cup \ell.N')$, and
     for all $i \in N_k \cup N_\ell$ such that $i \not\in (k\mid\ell).\danger$,
-    $(k\mid\ell).\mput(i,f)$ is well-defined.
-\end{lemma}
+    $(k\mid\ell).\mput(i,f)$ is well-scoped. In other words, at least one of
+    $\focus(\ell,i\cup S) \circ \focus(k,i)$ or 
+    $\focus(k,i\cup S) \circ \focus(\ell,i)$ is well-scoped.
+\end{proposition}
 \begin{proof}
     Suppose towards contradiction that both 
     $\focus(\ell,i\cup S) \circ \focus(k,i)(f)$
-    and $\focus(k,i\cup S) \circ \focus(\ell,i)(f)$ are undefined. 
+    and $\focus(k,i\cup S) \circ \focus(\ell,i)(f)$ are badly-scoped. 
     Then either
     \begin{itemize}
-        \item $i \cap N_k \in k.\danger$,
-        \item $i \cap N_\ell \in \ell.\danger$, or
+        \item $i \cap N_k \in k.\danger$;
+        \item $i \cap N_\ell \in \ell.\danger$; or
         \item both $(i \cup S) \cap N_k \in k.\danger$ and $(i \cup S) \cap N_\ell \in \ell.\danger$ 
     \end{itemize}
     If $i \cap N_k \in k.\danger$, then $i \cap N_k \in (k\mid\ell).\danger$,
@@ -403,16 +415,14 @@ which enforces the invariants of both $k$ and $\ell$.
     Similarly, if $i \cap N_\ell \in \ell.\danger$ then $i \in (k\mid\ell).\danger$.
     In the third case, we know that
     \begin{align*}
-        d_k &= (i \cup S) \cap N_k = (i \cap N_k) \cup (N_\ell \setminus N_k) \in k.\danger \text{ and }\\
-        d_\ell &= (i \cup S) \cap N_\ell = (i \cap N_\ell) \cup (N_k \setminus N_\ell) \in \ell.\danger
+        d_k &= (i \cup S) \cap N_k = (i \cap N_k) \cup S \in k.\danger \text{ and }\\
+        d_\ell &= (i \cup S) \cap N_\ell = (i \cap N_\ell) \cup S \in \ell.\danger
     \end{align*}
     By the definition of $(k\mid\ell).\danger$, we know that
-    \begin{align*}
-        (d_k \cup d_\ell) \setminus S \in (k\mid\ell).\danger.
-    \end{align*}
+    $(d_k \cup d_\ell) \setminus S \in (k\mid\ell).\danger$.
     Consider that
     \begin{align*}
-        d_k \cup d_\ell &= (i \cap N_k) \cup (i \cap N_\ell) \cup (N_\ell \cap N_k) \\
+        d_k \cup d_\ell &= (i \cap N_k) \cup (i \cap N_\ell) \cup S \\
         (d_k \cup d_\ell) \setminus S &= ((i \cap N_k) \setminus S) \cup ((i \cap N_\ell) \setminus S) \\
         &= (i \cap (N_k \setminus N_\ell)) \cup (i \cap (N_\ell \setminus N_k)) \\
         &= i \cap ((N_k \setminus N_\ell) \cup (N_\ell \setminus N_k))
@@ -431,6 +441,17 @@ Conjecture: If $D_k$ and $D_\ell$ are the danger zone representations of
         \{(d_k \cup d_l) \setminus (N_k \cup N_\ell) \mid d_k \in \upclose{D_k} {N_k} 
                                            \text{ and } d_\ell \in \upclose{D_\ell} {N_\ell}\}.
     \end{align*}
+
+We can extend composition to an arbitrary number of lenses. 
+%TODO: discuss sequential composition vs multi-way composition
+\begin{definition}
+    The put function for a sequence of lenses $k_1,\ldots,k_n$ is
+    \begin{align*}
+        \mput_s(i) &= \focus\left(k_n,i \cup \bigcup_{m < n}\domain(k_m)\right)
+            \circ \cdots \circ \focus\left(k_2, i \cup \domain(k_1)\right) \circ \focus(k_1,i)
+    \end{align*}
+\end{definition}
+%TODO: define multi-way composition
 
 In order to ensure that two lenses $k$ and $\ell$ have $k.D' \cap \ell.D' = \emptyset$,
 we must be able to rename hidden cell names in a lens.
@@ -455,9 +476,9 @@ We can also define renaming on names in the lens's domain.
         K(f) &= \ell.K(f[V/W])
     \end{align*}
 \end{definition}
-\begin{lemma}
+\begin{proposition}
     If $\ell\{W/V\}$ is well-defined, then $\ell\{W/V\} \equiv \ell$.
-\end{lemma}
+\end{proposition}
 
 At times we will want to \emph{hide} or \emph{bind} a cell in a lens $k$, 
 meaning that we want to move it from the external domain of $k$ to the
@@ -473,18 +494,18 @@ internal existential domain.
     \end{align*}
 \end{definition}
 
-\begin{lemma}
+\begin{proposition}
     Let $D$ be a danger zone representation of $\ell.\danger$ where
     $\ell : \mlens N$. Let $V \in N$. Then 
     \[ \upclose {\{d \mid d \in \ell.\danger \land V \notin d\}} {N\setminus\{V\}}
         = \{ d \mid d \in \upclose {\ell.\danger} N \land V \notin d\}. \]
-\end{lemma}
+\end{proposition}
 
-\begin{lemma}
-    Let $k : \mlens {N_k}$ and $\ell : \mlens {N_\ell}$ such that $k.N' \cap \ell.N' = \emptyset$.
-    Let $V$ be name in $N_\ell$ such that $V \notin N_k \cup k.N'$.
+\begin{proposition}
+    Let $k : \mlens {N_k}$ and $\ell : \mlens {N_\ell}$ such that $N_k\perp\ell.N'\perp~k.N'\perp~N_\ell$.
+    Let $V$ be name in $N_\ell$ such that $V \notin N_k$.
     Then $\nu V.(k \mid \ell) = k \mid (\nu V.\ell)$.
-\end{lemma}
+\end{proposition}
 \begin{proof}
     Follows from the definition of hiding and composition.
     The domain of $\nu V.(k \mid \ell)$ is 
@@ -507,7 +528,7 @@ internal existential domain.
         (\nu V.(k \mid \ell)).\danger &= k.\danger \cup \{d \in \ell.\danger \mid V \notin d \}
         \cup \{(d_k \cup d_\ell) \setminus S \mid d_k \in k.\danger, d_\ell \in \ell.\danger, V \notin d_\ell \} \\
         &= k.\danger \cup (\nu V.\ell).\danger \cup \{(d_k \cup d_\ell) \setminus S \mid
-            d_k \in k.\danger, d\ell \in (\nu V.\ell).\danger \} \\
+            d_k \in k.\danger, d_\ell \in (\nu V.\ell).\danger \} \\
         &= (k \mid \nu V.\ell).\danger
     \end{align*}
     Since hiding has no effect on put functions or consistency relations, 

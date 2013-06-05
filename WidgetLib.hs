@@ -55,7 +55,7 @@ compile :: Relation -> Widget
 compile r = --fst $ S.runState (compileRelation r) 0
   hideVars $ S.runState (compileRelation r) 0 where
     hideVars (w,0) = w
-    hideVars (w,n) = let n' = n-1 in
+    hideVars (w,n) = let n' = n-1 in 
       hide (getName n') (hideVars(w,n'))
       
   

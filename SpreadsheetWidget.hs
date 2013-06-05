@@ -180,7 +180,7 @@ renameCell n1 n2 w =
   
 renameExistential :: CellName -> CellName -> Widget -> Widget
 renameExistential n1 n2 w =
-  if not (Set.member n1 $ existentials w) then w 
+  if not (Set.member n1 $ existentials w) then w
   else w {existentials = exs, invariant = inv, methods = f} where
     change d = Set.insert n2 (Set.delete n1 d)
     changeVals n1 n2 vals =
