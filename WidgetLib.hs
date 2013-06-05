@@ -288,7 +288,7 @@ main = do
         Left err -> print err
         Right l -> -- list of relations
           let w = List.foldl g defaultWidget l where
-                g w r = compose w (compile r)
+                g w r = compose (compile r) w
           in do
             putStrLn (pprint l)
             loop $ generateSpreadsheet w
