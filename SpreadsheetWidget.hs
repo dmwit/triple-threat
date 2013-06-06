@@ -89,11 +89,11 @@ composeAll = composeAll_ . renameAll
 
 renameAll :: [Widget] -> [Widget]
 renameAll ws = zipWith rename nameMaps ws where
-  domains     = map (Set.toList . domain) ws
-  domainNames = Set.unions (map domain ws)
-  allNames    = [1..] >>= flip replicateM ['a'..'z']
-  freshNames  = allNames \\ Set.toList domainNames
-  nameMaps    = zipWith zip domains (splitPlacesBlanks (map length domains) freshNames)
+  existentialNames = map (Set.toList . existentials) ws
+  domainNames      = Set.unions (map domain ws)
+  allNames         = [1..] >>= flip replicateM ['a'..'z']
+  freshNames       = allNames \\ Set.toList domainNames
+  nameMaps         = zipWith zip existentialNames (splitPlacesBlanks (map length existentialNames) freshNames)
 
 composeAll_ :: [Widget] -> Widget
 composeAll_ ws = Widget
