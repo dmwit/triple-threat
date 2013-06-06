@@ -228,15 +228,19 @@ constWidget n t = Widget
 -------------------------------------------------------------------
 ------------------------------- parser ----------------------------
 
-loopMany s = case s of
+nubOn f = nubBy (\x y -> f x == f y)
+rle f = map (\xs -> (head xs, length xs)) . groupBy (\x y -> f x == f y)
+
+loopMany s = case rle values s of
   []       -> putStrLn "The impossible happened! Our nondeterministic widgets returned no results."
-  [s]      -> loop s
-  ss@(s:_) -> do
+  [(s,n)]  -> putStrLn ("skipping " ++ show n ++ " duplicates") >> loop s
+  ss@((s,_):_) -> do
     putStrLn "There are many possible ways to update the spreadsheet."
-    forM_ (zip [1..] ss) $ \(i, s) -> do
+    forM_ (zip [1..] ss) $ \(i, (s, n)) -> do
       putStr "Choice "
       print i
       putStrLn (pprint s ++ "\n")
+      when (n>1) (putStrLn ("(" ++ show n ++ " duplicates)"))
     putStrLn "Arbitrary choosing the first one."
     loop s
 
@@ -247,7 +251,8 @@ loop s = do
   case choice of
     "l" -> lockCells s
     "u" -> unlockCells s
-    "c" -> putStrLn "Please choose either (l), (u) or (c)." >> loop s
+    "c" -> changeCells s
+    _   -> putStrLn "Please choose either (l), (u) or (c)." >> loop s
 
 lockCells s = do
   cellNames <- words <$> prompt "Lock cells: "
