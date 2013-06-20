@@ -1,11 +1,13 @@
 module ConstraintGraph where
 
+import Control.Applicative
 import Control.Arrow
 import Data.Default
 import Data.List as List
 import Data.Map  as Map
 import Data.Set  as Set
 import Relation
+import System.Process
 
 data ID
 	= B String
@@ -112,3 +114,30 @@ budgetGraph = List.foldr unionGraph def
 	, plusGraph "_d" "Overhead" "Total"
 	, minusGraph "Award" "Total" "Less"
 	]
+
+solutionToDot :: ConstraintGraph -> [MethodID] -> String
+solutionToDot g ms = "digraph {\n" ++ intercalate ";" [methodToDot m | m <- ms] ++ "\n}" where
+	methodToDot m = case Set.toList (projectR m (constraintMethods g)) of
+		[c] -> methodConstraintToDot c m (projectL c (constrainedVariables g)) (projectL m (methodOutputs g))
+		_   -> error $ "weird, this method is not related to exactly one constraint: " ++ show m
+	methodConstraintToDot c m vs os = show (show c) ++ "[label=" ++ show (baseName c) ++ "];"
+		++ intercalate ";"
+			[ show (show v) ++ " -> " ++ show (show c)
+			| v <- Set.toList $ vs Set.\\ os
+			]
+		++ intercalate ";"
+			[ show (show c) ++ " -> " ++ show (show v)
+			| v <- Set.toList os
+			]
+
+displaySolutions viewer g = go (fst <$> solve g) where
+	go [] = return ()
+	go (s:ss) = do
+		writeFile "solution.dot" (solutionToDot g s)
+		system "neato solution.dot -Tpng -o solution.png"
+		system (viewer ++ " solution.png")
+		putStrLn "q to quit, any other key to continue"
+		c <- getChar
+		case c of
+			'q' -> return ()
+			_   -> go ss
